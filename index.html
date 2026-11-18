@@ -632,9 +632,46 @@
         body.is-visitor [onclick^="triggerSkinUpload"],
         body.is-visitor [onclick^="openAddProfileCategoryPrompt"],
         body.is-visitor [onclick^="openEditCustomProfileModal"],
-        body.is-visitor [onclick^="showWin98Alert('선택한 글을"],
+        body.is-visitor [onclick^="moveSelectedBoardPosts"],
         body.is-visitor .owner-only {
             display: none !important;
+        }
+
+        /* ===== 게시판: 사진 크기 / 자유게시판 표시 ===== */
+        #detail-content-body img,
+        #board-write-content img {
+            display: block;
+            max-width: 100% !important;
+            max-height: 260px;
+            width: auto !important;
+            height: auto !important;
+            object-fit: contain;
+            margin: 6px 0;
+            border: 1px solid #e1ece5;
+        }
+
+        .board-shared-tag {
+            display: inline-block;
+            margin-left: 4px;
+            padding: 0 4px;
+            background: #4a705e;
+            color: #fff;
+            font-size: 9px;
+            font-weight: normal;
+            border-radius: 2px;
+            vertical-align: 1px;
+        }
+
+        .detail-author-link {
+            color: #2e5944;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .board-write-shared-note {
+            font-size: 10px;
+            color: #4a705e;
+            margin-left: 4px;
         }
 
         /* ===== 사진첩 탭 ===== */
@@ -2843,9 +2880,9 @@
                                     </div>
                                     <div class="board-actions">
                                         <button id="board-move-btn" class="board-btn"
-                                            onclick="showWin98Alert('선택한 글을 이동합니다.')">이동</button>
+                                            onclick="moveSelectedBoardPosts()">이동</button>
                                         <button id="board-delete-btn" class="board-btn"
-                                            onclick="showWin98Alert('선택한 글을 삭제합니다.')">삭제</button>
+                                            onclick="deleteSelectedBoardPosts()">삭제</button>
                                         <button id="board-write-open-btn" class="board-btn"
                                             style="background:#2e5944; color:white;" onclick="openBoardWriteView()">✏️
                                             글쓰기</button>
@@ -2881,6 +2918,8 @@
                                 </div>
                                 <div class="board-bottom-bar">
                                     <div class="board-actions" style="margin-left: auto;">
+                                        <button class="board-btn" id="board-detail-delete-btn" style="display:none;"
+                                            onclick="deleteCurrentBoardPost()">삭제</button>
                                         <button class="board-btn" onclick="backToBoardList()">목록</button>
                                     </div>
                                 </div>
@@ -2896,8 +2935,9 @@
                                     <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
                                         <span style="font-size: 11px; font-weight: bold; color: #2e5944;">카테고리:</span>
                                         <select id="board-write-category-select" class="board-select"
-                                            style="flex-grow: 1;">
+                                            style="flex-grow: 1;" onchange="updateBoardWriteNote()">
                                         </select>
+                                        <span class="board-write-shared-note" id="board-write-shared-note"></span>
                                     </div>
                                     <input type="text" id="board-write-title" class="board-title-input"
                                         placeholder="제목을 입력하세요">
@@ -3282,7 +3322,7 @@
             showWin98Prompt('새로 추가할 게시판 카테고리명을 입력하세요:', '', function (name) {
                 if (name && name.trim() !== '') {
                     const clean = name.trim();
-                    if (clean === '전체보기' || clean === '스크랩' || boardCategories.includes(clean)) {
+                    if (clean === '전체보기' || clean === '스크랩' || clean === SHARED_BOARD_NAME || boardCategories.includes(clean)) {
                         showWin98Alert('사용할 수 없거나 이미 존재하는 카테고리명입니다.');
                         return;
                     }
@@ -3296,10 +3336,14 @@
 
         function editBoardCategoryPrompt(idx) {
             const oldName = boardCategories[idx];
+            if (oldName === SHARED_BOARD_NAME) {
+                showWin98Alert('자유게시판은 모든 친구가 함께 쓰는 게시판이라<br>이름을 바꿀 수 없어요.');
+                return;
+            }
             showWin98Prompt(`"${oldName}" 카테고리의 새 이름을 입력하세요:`, oldName, function (name) {
                 if (name && name.trim() !== '') {
                     const clean = name.trim();
-                    if (clean === '전체보기' || clean === '스크랩' || boardCategories.includes(clean)) {
+                    if (clean === '전체보기' || clean === '스크랩' || clean === SHARED_BOARD_NAME || boardCategories.includes(clean)) {
                         showWin98Alert('사용할 수 없거나 이미 존재하는 카테고리명입니다.');
                         return;
                     }
@@ -3320,6 +3364,10 @@
 
         function deleteBoardCategory(idx) {
             const targetCat = boardCategories[idx];
+            if (targetCat === SHARED_BOARD_NAME) {
+                showWin98Alert('자유게시판은 모든 친구가 함께 쓰는 게시판이라<br>삭제할 수 없어요.');
+                return;
+            }
             showWin98Confirm(`"${targetCat}" 카테고리를 삭제하시겠습니까?\n해당 카테고리의 글들도 모두 삭제됩니다.`, function () {
                 boardCategories.splice(idx, 1);
                 boardPosts = boardPosts.filter(p => p.category !== targetCat);
@@ -3867,7 +3915,7 @@
                 category: '스크랩',
                 title: `[스크랩] ${targetPost.title}`,
                 author: targetPost.author || '미니홈피 주인',
-                date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                date: formatLocalDateTime(new Date()),
                 content: targetPost.content,
                 scrapCount: 0
             };
@@ -4757,7 +4805,7 @@
                 document.getElementById('diary-sub-detail').classList.add('active');
             } else if (subName === 'calendar') {
                 document.getElementById('diary-sub-calendar').classList.add('active');
-                const todayIso = new Date().toISOString().split('T')[0];
+                const todayIso = formatLocalDateTime(new Date()).split(' ')[0];
                 document.getElementById('diary-calendar-input').value = todayIso;
             } else if (subName === 'category-select') {
                 document.getElementById('diary-sub-category-select').classList.add('active');
@@ -4921,12 +4969,10 @@
 
         function renderBoardList() {
             const container = document.getElementById('board-table-container');
-            let filtered = boardPosts;
-            if (currentBoardFilter !== '전체보기') {
-                filtered = boardPosts.filter(p => p.category === currentBoardFilter);
-            }
+            const items = getBoardViewItems();
+            if (typeof updateBoardBadge === 'function') updateBoardBadge();
 
-            if (filtered.length === 0) {
+            if (items.length === 0) {
                 container.innerHTML = `<div class="board-empty-message">게시하거나 스크랩한 글이 없습니다.</div>`;
                 return;
             }
@@ -4944,15 +4990,20 @@
                     </thead>
                     <tbody>
             `;
-            filtered.forEach((post) => {
-                const actualIdx = boardPosts.indexOf(post);
+            items.forEach((item, i) => {
+                const post = item.post;
+                const isShared = item.kind === 'shared';
+                const author = isShared ? cachedNickname(post.authorId, post.authorName) : (post.author || '미니홈피 주인');
+                const openCall = isShared ? `viewSharedBoardPost('${item.ref}')` : `viewBoardDetail(${item.ref})`;
                 html += `
                     <tr>
-                        <td style="text-align: center;"><input type="checkbox"></td>
-                        <td style="text-align: center;">${actualIdx + 1}</td>
-                        <td style="cursor: pointer; font-weight: bold;" onclick="viewBoardDetail(${actualIdx})">${post.title} <span style="font-size:9px; color:#888; font-weight:normal;">[${post.category}]</span></td>
-                        <td>${post.author || '미니홈피 주인'}</td>
-                        <td style="font-size: 10px; color: #666;">${post.date || '2026.06.07'}</td>
+                        <td style="text-align: center;"><input type="checkbox" class="board-row-check" data-kind="${item.kind}" data-ref="${item.ref}"></td>
+                        <td style="text-align: center;">${items.length - i}</td>
+                        <td style="cursor: pointer; font-weight: bold;" onclick="${openCall}">${escapeFavoriteHtml(post.title)} ${isShared
+                            ? '<span class="board-shared-tag">자유게시판</span>'
+                            : `<span style="font-size:9px; color:#888; font-weight:normal;">[${escapeFavoriteHtml(post.category)}]</span>`}</td>
+                        <td>${escapeFavoriteHtml(author)}</td>
+                        <td style="font-size: 10px; color: #666;">${escapeFavoriteHtml(post.date || '')}</td>
                     </tr>
                 `;
             });
@@ -5017,7 +5068,7 @@
                 category: category,
                 title: title,
                 author: '미니홈피 주인',
-                date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                date: formatLocalDateTime(new Date()),
                 content: content,
                 scrapCount: 0
             });
@@ -5374,7 +5425,7 @@
                 userName: currentVisitorProfile.name,
                 category: guestbookCategories[0] || '기본방명록',
                 content: content,
-                date: now.toISOString().replace('T', ' ').substring(0, 16),
+                date: formatLocalDateTime(now),
                 timestamp: now.getTime()
             }).then(() => {
                 input.value = '';
@@ -5475,7 +5526,7 @@
             diaries: { get: () => diaries, set: v => { diaries = v; } },
             diaryCategories: { get: () => diaryCategories, set: v => { diaryCategories = v; } },
             boardPosts: { get: () => boardPosts, set: v => { boardPosts = v; } },
-            boardCategories: { get: () => boardCategories, set: v => { boardCategories = v; } },
+            boardCategories: { get: () => boardCategories, set: v => { boardCategories = v.includes(SHARED_BOARD_NAME) ? v : [SHARED_BOARD_NAME].concat(v); } },
             jukeboxCategories: { get: () => jukeboxCategories, set: v => { jukeboxCategories = v; } },
             // 내 컴퓨터에서 고른 음악 파일(blob:)은 저장할 수 없어서 빼고 저장해요.
             jukeboxSongs: {
@@ -5697,6 +5748,7 @@
 
             if (window.__runInitialRender) window.__runInitialRender();
             listenGuestbook();
+            listenSharedBoard();
             hompyReady = true;
             hideHompyGate();
 
@@ -5782,6 +5834,276 @@
                 if (btn) btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
                 window.scrollTo({ top: 0 });
                 return result;
+            };
+        })();
+
+        /* ===== 날짜: 내 컴퓨터(한국) 시간으로 ===== */
+        function formatLocalDateTime(d) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        /* ===== 자유게시판: 모든 친구의 홈피에 함께 보이는 공용 게시판 =====
+           저장 위치: public_board/{글 id} = { authorId, authorName, title, content, date, timestamp, scrapCount }
+           - 쓴 사람만 지울 수 있어요. 다른 카테고리 글은 지금처럼 각자 홈피에만 저장돼요. */
+        const SHARED_BOARD_NAME = '자유게시판';
+        let sharedBoardPosts = {};
+        let currentViewingSharedKey = null;
+
+        function listenSharedBoard() {
+            fbDb.ref('public_board').on('value', async (snap) => {
+                sharedBoardPosts = snap.val() || {};
+                await Promise.all(Object.values(sharedBoardPosts).map(p => loadUserInfo(p.authorId)));
+                renderBoardList();
+                if (currentViewingSharedKey && !sharedBoardPosts[currentViewingSharedKey]
+                    && document.getElementById('board-sub-detail').style.display !== 'none') {
+                    backToBoardList();
+                }
+            });
+        }
+
+        function dateToTimestamp(dateText) {
+            if (!dateText) return 0;
+            const t = Date.parse(String(dateText).replace(' ', 'T'));
+            return isNaN(t) ? 0 : t;
+        }
+
+        // 목록에 보일 글: 이 홈피의 글 + 자유게시판 공용 글 (최신 순)
+        function getBoardViewItems() {
+            const items = [];
+            boardPosts.forEach((post, idx) => {
+                if (currentBoardFilter !== '전체보기' && post.category !== currentBoardFilter) return;
+                items.push({ kind: 'local', ref: idx, post, ts: dateToTimestamp(post.date) });
+            });
+            if (currentBoardFilter === '전체보기' || currentBoardFilter === SHARED_BOARD_NAME) {
+                Object.keys(sharedBoardPosts).forEach(key => {
+                    const post = sharedBoardPosts[key];
+                    items.push({ kind: 'shared', ref: key, post: { ...post, category: SHARED_BOARD_NAME }, ts: post.timestamp || 0 });
+                });
+            }
+            return items.sort((a, b) => b.ts - a.ts);
+        }
+
+        function updateBoardBadge() {
+            if (typeof hompyOwnerId === 'undefined' || !hompyOwnerId) return;
+            const mine = Object.values(sharedBoardPosts).filter(p => p.authorId === hompyOwnerId).length;
+            const total = boardPosts.length + mine;
+            const badge = document.getElementById('board-count-badge');
+            if (badge) badge.innerText = `${total}/${total}`;
+        }
+
+        function setBoardDetailDeleteVisible(visible) {
+            const btn = document.getElementById('board-detail-delete-btn');
+            if (btn) btn.style.display = visible ? 'inline-block' : 'none';
+        }
+
+        function viewSharedBoardPost(key) {
+            const post = sharedBoardPosts[key];
+            if (!post) return;
+            currentViewingSharedKey = key;
+            currentViewingPostIndex = null;
+            const authorName = cachedNickname(post.authorId, post.authorName);
+            document.getElementById('detail-title-text').innerText = post.title;
+            const authorEl = document.getElementById('detail-author-text');
+            authorEl.innerHTML = `<span class="detail-author-link" title="${escapeFavoriteHtml(authorName)}님의 미니홈피로 이동">${escapeFavoriteHtml(authorName)}</span> <span class="board-shared-tag">자유게시판</span>`;
+            authorEl.querySelector('.detail-author-link').onclick = () => {
+                if (post.authorId !== hompyOwnerId) location.href = hompyUrlOf(post.authorId);
+            };
+            document.getElementById('detail-date-text').innerText = post.date || '';
+            document.getElementById('detail-scrap-count').innerText = post.scrapCount || 0;
+            document.getElementById('detail-content-body').innerHTML = post.content ? DOMPurify.sanitize(post.content) : '내용이 없습니다.';
+            setBoardDetailDeleteVisible(post.authorId === myId);
+            document.getElementById('board-sub-list').style.display = 'none';
+            document.getElementById('board-sub-write').style.display = 'none';
+            document.getElementById('board-sub-detail').style.display = 'flex';
+        }
+
+        // 내 글 상세 보기: 공용 글 표시 지우고, 주인에게만 삭제 버튼
+        (function patchBoardDetail() {
+            const originalView = window.viewBoardDetail;
+            window.viewBoardDetail = function (index) {
+                currentViewingSharedKey = null;
+                const result = originalView.apply(this, arguments);
+                setBoardDetailDeleteVisible(isOwner);
+                return result;
+            };
+            const originalBack = window.backToBoardList;
+            window.backToBoardList = function () {
+                currentViewingSharedKey = null;
+                return originalBack.apply(this, arguments);
+            };
+        })();
+
+        // 상세 화면의 [삭제]
+        function deleteCurrentBoardPost() {
+            if (currentViewingSharedKey) {
+                const key = currentViewingSharedKey;
+                const post = sharedBoardPosts[key];
+                if (!post || post.authorId !== myId) return;
+                showWin98Confirm('자유게시판에서 이 글을 삭제하시겠습니까?<br>모든 친구의 홈피에서 사라져요.', function () {
+                    fbDb.ref('public_board/' + key).remove().then(() => {
+                        backToBoardList();
+                        showWin98Alert('글을 삭제했습니다.');
+                    }).catch(() => showWin98Alert('삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+                }, '글 삭제');
+                return;
+            }
+            if (!isOwner || currentViewingPostIndex === null || currentViewingPostIndex === undefined) return;
+            const idx = currentViewingPostIndex;
+            showWin98Confirm('이 글을 삭제하시겠습니까?', function () {
+                boardPosts.splice(idx, 1);
+                renderBoardCategories();
+                updateStatsDisplay();
+                backToBoardList();
+                saveDirtyState();
+                showWin98Alert('글을 삭제했습니다.');
+            }, '글 삭제');
+        }
+
+        function getCheckedBoardRows() {
+            return Array.from(document.querySelectorAll('.board-row-check:checked')).map(el => ({ kind: el.dataset.kind, ref: el.dataset.ref }));
+        }
+
+        // 목록에서 체크한 글 [삭제]
+        function deleteSelectedBoardPosts() {
+            const rows = getCheckedBoardRows();
+            if (rows.length === 0) {
+                showWin98Alert('삭제할 글을 먼저 체크해 주세요.');
+                return;
+            }
+            const localIdx = isOwner ? rows.filter(r => r.kind === 'local').map(r => Number(r.ref)) : [];
+            const sharedKeys = rows.filter(r => r.kind === 'shared' && sharedBoardPosts[r.ref] && sharedBoardPosts[r.ref].authorId === myId).map(r => r.ref);
+            const skipped = rows.length - localIdx.length - sharedKeys.length;
+            if (localIdx.length + sharedKeys.length === 0) {
+                showWin98Alert('내가 쓴 글만 삭제할 수 있어요.');
+                return;
+            }
+            const msg = `선택한 글 ${localIdx.length + sharedKeys.length}개를 삭제하시겠습니까?`
+                + (sharedKeys.length ? '<br>(자유게시판 글은 모든 친구의 홈피에서 사라져요)' : '')
+                + (skipped ? `<br><span style="color:#888;">다른 사람이 쓴 글 ${skipped}개는 건너뛰어요.</span>` : '');
+            showWin98Confirm(msg, function () {
+                localIdx.sort((a, b) => b - a).forEach(i => boardPosts.splice(i, 1));
+                const updates = {};
+                sharedKeys.forEach(k => { updates['public_board/' + k] = null; });
+                const done = () => {
+                    renderBoardCategories();
+                    renderBoardList();
+                    updateStatsDisplay();
+                    if (localIdx.length) saveDirtyState();
+                    showWin98Alert('선택한 글을 삭제했습니다.');
+                };
+                if (sharedKeys.length) {
+                    fbDb.ref().update(updates).then(done).catch(() => showWin98Alert('일부 글을 삭제하지 못했습니다.'));
+                } else {
+                    done();
+                }
+            }, '글 삭제');
+        }
+
+        // 목록에서 체크한 내 글 [이동] (내 홈피 카테고리끼리만)
+        function moveSelectedBoardPosts() {
+            if (!isOwner) return;
+            const rows = getCheckedBoardRows();
+            const localIdx = rows.filter(r => r.kind === 'local').map(r => Number(r.ref));
+            if (localIdx.length === 0) {
+                showWin98Alert(rows.length ? '자유게시판 글은 옮길 수 없어요.' : '옮길 글을 먼저 체크해 주세요.');
+                return;
+            }
+            const targets = boardCategories.filter(c => c !== SHARED_BOARD_NAME);
+            if (targets.length === 0) {
+                showWin98Alert('옮길 수 있는 카테고리가 없어요.<br>폴더관리에서 카테고리를 먼저 추가해 주세요.');
+                return;
+            }
+            const overlay = document.getElementById('win98-modal-overlay');
+            document.getElementById('win98-title').innerText = '글 이동';
+            document.getElementById('win98-dialog-content').innerHTML = `
+                <div style="margin-bottom:6px;">선택한 글 ${localIdx.length}개를 옮길 카테고리를 고르세요:</div>
+                <select id="board-move-target" class="board-select" style="width:100%;">
+                    ${targets.map(c => `<option value="${escapeFavoriteHtml(c)}">${escapeFavoriteHtml(c)}</option>`).join('')}
+                </select>
+                <div style="font-size:10px; color:#777; margin-top:6px;">자유게시판으로는 옮길 수 없어요. (새 글로 써 주세요)</div>`;
+            document.getElementById('win98-dialog-buttons').innerHTML = `
+                <button class="win98-btn" id="board-move-ok">이동</button>
+                <button class="win98-btn" onclick="closeWin98Modal()">취소</button>`;
+            overlay.style.display = 'flex';
+            document.getElementById('board-move-ok').onclick = function () {
+                const target = document.getElementById('board-move-target').value;
+                localIdx.forEach(i => { if (boardPosts[i]) boardPosts[i].category = target; });
+                closeWin98Modal();
+                renderBoardList();
+                saveDirtyState();
+                showWin98Alert(`"${escapeFavoriteHtml(target)}"(으)로 옮겼습니다.`);
+            };
+        }
+
+        // 글쓰기: 자유게시판을 고르면 공용 게시판에 올리기
+        function updateBoardWriteNote() {
+            const select = document.getElementById('board-write-category-select');
+            const note = document.getElementById('board-write-shared-note');
+            if (select && note) note.innerText = select.value === SHARED_BOARD_NAME ? '모든 친구의 홈피에 보여요' : '';
+        }
+
+        (function patchBoardWrite() {
+            const originalOpen = window.openBoardWriteView;
+            window.openBoardWriteView = function () {
+                const result = originalOpen.apply(this, arguments);
+                updateBoardWriteNote();
+                return result;
+            };
+            const originalSubmit = window.submitBoardPost;
+            window.submitBoardPost = function () {
+                const category = document.getElementById('board-write-category-select').value;
+                if (category !== SHARED_BOARD_NAME) return originalSubmit.apply(this, arguments);
+                if (!isOwner) return;
+                const title = document.getElementById('board-write-title').value.trim();
+                const content = document.getElementById('board-write-content').innerHTML.trim();
+                if (!title) { showWin98Alert('제목을 입력하세요.'); return; }
+                if (title.length > 100) { showWin98Alert('제목은 100자까지 쓸 수 있어요.'); return; }
+                if (!content) { showWin98Alert('내용을 입력하세요.'); return; }
+                if (content.length > 900000) { showWin98Alert('글이 너무 커요. 사진 수를 줄여 주세요.'); return; }
+                const now = new Date();
+                fbDb.ref('public_board').push({
+                    authorId: myId,
+                    authorName: currentVisitorProfile.name,
+                    title,
+                    content,
+                    date: formatLocalDateTime(now),
+                    timestamp: now.getTime()
+                }).then(() => {
+                    backToBoardList();
+                    showWin98Alert('자유게시판에 등록되었어요!<br>모든 친구의 미니홈피에서 볼 수 있어요.');
+                }).catch(() => showWin98Alert('글을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+            };
+
+            // 자유게시판 글 스크랩: 내 홈피 [스크랩]에 복사 + 스크랩 수 올리기
+            const originalScrap = window.executeScrapPost;
+            window.executeScrapPost = function () {
+                if (!currentViewingSharedKey) return originalScrap.apply(this, arguments);
+                if (!isOwner) return;
+                const key = currentViewingSharedKey;
+                const post = sharedBoardPosts[key];
+                if (!post) return;
+                if (boardPosts.some(p => p.category === '스크랩' && p.sharedKey === key)) {
+                    showWin98Alert('이미 스크랩된 게시글입니다.');
+                    return;
+                }
+                boardPosts.push({
+                    category: '스크랩',
+                    title: `[스크랩] ${post.title}`,
+                    author: cachedNickname(post.authorId, post.authorName),
+                    date: formatLocalDateTime(new Date()),
+                    content: post.content,
+                    scrapCount: 0,
+                    sharedKey: key
+                });
+                const next = (post.scrapCount || 0) + 1;
+                fbDb.ref('public_board/' + key + '/scrapCount').set(next).catch(() => { });
+                document.getElementById('detail-scrap-count').innerText = next;
+                renderBoardCategories();
+                renderBoardList();
+                updateStatsDisplay();
+                saveDirtyState();
+                showWin98Alert('게시글이 [스크랩] 카테고리에 저장되었습니다!');
             };
         })();
 
