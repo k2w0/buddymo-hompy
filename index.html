@@ -3244,7 +3244,7 @@
             `;
             boardCategories.forEach(cat => {
                 const isActive = (currentBoardFilter === cat) ? 'active-sub' : '';
-                html += `<li class="${isActive}" onclick="filterBoardByCategory('${cat}', this)">${cat}</li>`;
+                html += `<li class="${isActive}" onclick="filterBoardByCategory(${jsArg(cat)}, this)">${escapeFavoriteHtml(cat)}</li>`;
             });
             menuList.innerHTML = html;
 
@@ -3252,7 +3252,7 @@
             let dropHtml = `<option value="전체보기" ${currentBoardFilter === '전체보기' ? 'selected' : ''}>전체보기</option>`;
             dropHtml += `<option value="스크랩" ${currentBoardFilter === '스크랩' ? 'selected' : ''}>스크랩</option>`;
             boardCategories.forEach(cat => {
-                dropHtml += `<option value="${cat}" ${currentBoardFilter === cat ? 'selected' : ''}>${cat}</option>`;
+                dropHtml += `<option value="${escapeFavoriteHtml(cat)}" ${currentBoardFilter === cat ? 'selected' : ''}>${escapeFavoriteHtml(cat)}</option>`;
             });
             dropdown.innerHTML = dropHtml;
 
@@ -3260,7 +3260,7 @@
             if (writeSelect) {
                 let writeHtml = '';
                 boardCategories.forEach(cat => {
-                    writeHtml += `<option value="${cat}">${cat}</option>`;
+                    writeHtml += `<option value="${escapeFavoriteHtml(cat)}">${escapeFavoriteHtml(cat)}</option>`;
                 });
                 writeSelect.innerHTML = writeHtml;
             }
@@ -3295,7 +3295,7 @@
             boardCategories.forEach((cat, idx) => {
                 listHtml += `
                     <div style="padding: 4px; font-size: 11px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                        <span>📁 ${cat}</span>
+                        <span>📁 ${escapeFavoriteHtml(cat)}</span>
                         <div style="display: flex; gap: 4px;">
                             <button class="board-btn" style="padding: 1px 4px; font-size: 9px;" onclick="editBoardCategoryPrompt(${idx})">수정</button>
                             <button class="board-btn" style="padding: 1px 4px; font-size: 9px; color:#ff3b30;" onclick="deleteBoardCategory(${idx})">삭제</button>
@@ -3395,7 +3395,7 @@
             profileData.forEach((parentCat, pIdx) => {
                 html += `
                     <div class="menu-category" onclick="toggleParentCategory(${pIdx})" ${!isVisitorMode ? `oncontextmenu="handleProfileParentContextMenu(event, ${pIdx})"` : ''}>
-                        <span>📁 ${parentCat.categoryName}</span> 
+                        <span>📁 ${escapeFavoriteHtml(parentCat.categoryName)}</span> 
                         <span style="display:flex; align-items:center; gap:4px;">
                             ${!isVisitorMode ? `<span style="font-size:9px; color:#555;" onclick="event.stopPropagation(); openAddProfileSubItemPrompt(${pIdx})" title="하위 항목 추가">+하위</span>` : ''}
                             <span class="arrow-icon" id="parent-arrow-${pIdx}">${parentCat.hidden ? '▼' : '▲'}</span>
@@ -3407,7 +3407,7 @@
                     const isActive = (currentProfilePath.parentIndex === pIdx && currentProfilePath.subIndex === sIdx) ? 'active-sub' : '';
                     html += `
                         <li class="${isActive}" onclick="selectProfileSubItem(${pIdx}, ${sIdx})" ${!isVisitorMode ? `oncontextmenu="handleProfileSubContextMenu(event, ${pIdx}, ${sIdx})"` : ''}>
-                            - ${sub.name}
+                            - ${escapeFavoriteHtml(sub.name)}
                         </li>
                     `;
                 });
@@ -3460,7 +3460,7 @@
                     <div class="profile-layout">
                         <div class="profile-layout-left">
                             <div class="photo-box profile-layout-photo" style="cursor: ${!isVisitorMode ? 'pointer' : 'default'};" ${!isVisitorMode ? 'onclick="triggerProfilePhotoUpload()" title="클릭해서 프로필 사진 변경"' : ''}>
-                                ${activeSub.photoUrl ? `<img src="${activeSub.photoUrl}" alt="프로필 사진">` : '[사진 칸]'}
+                                ${activeSub.photoUrl ? `<img src="${escapeFavoriteHtml(activeSub.photoUrl)}" alt="프로필 사진">` : '[사진 칸]'}
                             </div>
                             <button class="profile-mood-btn ${isVisitorMode ? 'is-readonly' : ''}" ${!isVisitorMode ? 'onclick="openMoodPickerModal()"' : ''}><span class="mood-label">TODAY IS...</span>오늘의 기분은?</button>
                         </div>
@@ -3469,13 +3469,13 @@
                                 <span><b>About me</b><span class="intro-sub">소개</span></span>
                                 ${!isVisitorMode ? '<button class="profile-intro-edit-link" onclick="openEditProfileItemModal()">+ 소개 수정하기</button>' : ''}
                             </div>
-                            <div class="profile-layout-intro-text">${introTextDisplay}</div>
+                            <div class="profile-layout-intro-text">${escapeFavoriteHtml(introTextDisplay)}</div>
                         </div>
                     </div>
                 `;
                 const homePhotoBox = document.getElementById('home-photo-box');
                 if (activeSub.photoUrl) {
-                    homePhotoBox.innerHTML = `<img src="${activeSub.photoUrl}" alt="프로필 사진">`;
+                    homePhotoBox.innerHTML = `<img src="${escapeFavoriteHtml(activeSub.photoUrl)}" alt="프로필 사진">`;
                 } else {
                     homePhotoBox.innerHTML = '[사진 칸]';
                 }
@@ -3485,11 +3485,9 @@
                 const customTextDisplay = (activeSub.text && activeSub.text.trim() !== '') ? activeSub.text : '작성된 내용이 없습니다. 하단 버튼을 눌러 내용을 추가해보세요.';
                 area.innerHTML = `
                     <div style="padding: 10px; text-align: left; font-size: 13px; color: #2e5944; font-weight: bold; border-bottom: 1px solid #b2c9be; margin-bottom: 10px;">
-                        📂 [${parentCat.categoryName}] - ${activeSub.name}
+                        📂 [${escapeFavoriteHtml(parentCat.categoryName)}] - ${escapeFavoriteHtml(activeSub.name)}
                     </div>
-                    <div class="profile-intro-text">
-                        ${customTextDisplay}
-                    </div>
+                    <div class="profile-intro-text" style="white-space: pre-wrap;">${escapeFavoriteHtml(customTextDisplay)}</div>
                     ${editButtonsHtml}
                 `;
             }
@@ -3620,7 +3618,7 @@
             if (homeBox) homeBox.innerText = `TODAY IS... ${currentMood.emoji}${currentMood.label}`;
             const profileBtn = document.querySelector('.profile-mood-btn');
             if (profileBtn) {
-                profileBtn.innerHTML = `<span class="mood-label">TODAY IS...</span>${currentMood.emoji} ${escapeFavoriteHtml(currentMood.label)}`;
+                profileBtn.innerHTML = `<span class="mood-label">TODAY IS...</span>${escapeFavoriteHtml(currentMood.emoji)} ${escapeFavoriteHtml(currentMood.label)}`;
                 profileBtn.title = isVisitorMode ? '' : '눌러서 오늘의 기분 바꾸기';
             }
         }
@@ -3637,7 +3635,7 @@
                         <span class="mood-emoji">${mood.emoji}</span><span>${mood.label}</span>
                     </div>`).join('')}
                 </div>
-                <div class="mood-picker-current">선택한 기분: <b id="mood-picker-current-label">${currentMood.emoji} ${escapeFavoriteHtml(currentMood.label)}</b></div>
+                <div class="mood-picker-current">선택한 기분: <b id="mood-picker-current-label">${escapeFavoriteHtml(currentMood.emoji)} ${escapeFavoriteHtml(currentMood.label)}</b></div>
             `;
             document.getElementById('win98-dialog-buttons').innerHTML = `
                 <button class="win98-btn" id="mood-picker-ok">확인</button>
@@ -3672,7 +3670,7 @@
             const overlay = document.getElementById('win98-modal-overlay');
             document.getElementById('win98-title').innerText = '내용 편집';
             document.getElementById('win98-dialog-content').innerHTML = `
-                <div style="margin-bottom: 6px; font-weight: bold;">${activeSub.name} 내용 입력:</div>
+                <div style="margin-bottom: 6px; font-weight: bold;">${escapeFavoriteHtml(activeSub.name)} 내용 입력:</div>
                 <textarea id="win98-custom-text-input" class="diary-content-textarea" style="width:100%; height:120px; font-size:11px;">${activeSub.text || ''}</textarea>
             `;
             document.getElementById('win98-dialog-buttons').innerHTML = `
@@ -3711,7 +3709,7 @@
 
             jukeboxCategories.forEach(cat => {
                 const isActive = (currentJukeboxFilter === cat) ? 'active-sub' : '';
-                html += `<li class="${isActive}" onclick="filterJukeboxByCategory('${cat}', this)">${cat}</li>`;
+                html += `<li class="${isActive}" onclick="filterJukeboxByCategory(${jsArg(cat)}, this)">${escapeFavoriteHtml(cat)}</li>`;
             });
             ul.innerHTML = html;
         }
@@ -3830,8 +3828,8 @@
                     <tr>
                         <td style="text-align: center;"><input type="checkbox" ${isPlaying ? 'checked' : ''}></td>
                         <td style="text-align: center; color: #777;">${actualIndex + 1}</td>
-                        <td style="font-weight: bold; color: ${isPlaying ? '#ff3b30' : '#2e5944'}; cursor: pointer;" onclick="playSong(${actualIndex})">${song.title} <span style="font-size:9px; color:#888; font-weight:normal;">[${song.category}]</span></td>
-                        <td style="color: #555;">${song.artist}</td>
+                        <td style="font-weight: bold; color: ${isPlaying ? '#ff3b30' : '#2e5944'}; cursor: pointer;" onclick="playSong(${actualIndex})">${escapeFavoriteHtml(song.title)} <span style="font-size:9px; color:#888; font-weight:normal;">[${escapeFavoriteHtml(song.category)}]</span></td>
+                        <td style="color: #555;">${escapeFavoriteHtml(song.artist)}</td>
                         <td style="text-align: center; display:flex; gap:2px; justify-content:center;">
                             <button class="board-btn" style="padding: 1px 4px; font-size: 10px;" onclick="playSong(${actualIndex})">재생</button>
                             <button class="board-btn" style="padding: 1px 4px; font-size: 10px;" onclick="editJukeboxSong(${actualIndex})">수정</button>
@@ -4008,8 +4006,13 @@
             }
         }
 
+        // onclick="함수(...)" 안에 글자를 넣을 때 쓰는 안전한 형태
+        function jsArg(value) {
+            return escapeFavoriteHtml(JSON.stringify(String(value == null ? '' : value)));
+        }
+
         function escapeFavoriteHtml(value) {
-            return String(value || '')
+            return String(value == null ? '' : value)
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -4203,7 +4206,7 @@
                         <div class="favorite-card-photo">${favoritePhotoMarkup(user, 'favorite-card-photo')}</div>
                         <div class="favorite-card-info">
                             <div class="favorite-card-name">${escapeFavoriteHtml(user.name)} <span style="font-size:10px; color:#999; font-weight:normal;">(${escapeFavoriteHtml(favorite.category)})</span></div>
-                            <div class="favorite-card-stats"><span style="color:#ff3b30;">Today</span> ${user.today || 0} &nbsp; <span style="color:#ff3b30;">Total</span> ${user.total || 0}</div>
+                            <div class="favorite-card-stats"><span style="color:#ff3b30;">Today</span> ${Number(user.today) || 0} &nbsp; <span style="color:#ff3b30;">Total</span> ${Number(user.total) || 0}</div>
                             <div class="favorite-card-intro">${escapeFavoriteHtml(user.intro || '친구가 설정한 소개')}</div>
                         </div>
                     </div>
@@ -4222,7 +4225,7 @@
                     <div class="favorite-detail-photo">${favoritePhotoMarkup(user, 'favorite-detail-photo')}</div>
                     <div>
                         <div class="favorite-detail-name">${escapeFavoriteHtml(user.name)}</div>
-                        <div class="favorite-detail-stats"><span style="color:#ff3b30;">Today</span> ${user.today || 0} &nbsp; <span style="color:#ff3b30;">Total</span> ${user.total || 0}</div>
+                        <div class="favorite-detail-stats"><span style="color:#ff3b30;">Today</span> ${Number(user.today) || 0} &nbsp; <span style="color:#ff3b30;">Total</span> ${Number(user.total) || 0}</div>
                         <div class="favorite-detail-intro">${escapeFavoriteHtml(user.intro || '친구가 설정한 소개')}</div>
                     </div>
                 </div>
@@ -4382,7 +4385,7 @@
                         const cover = album.photos.length ? album.photos[album.photos.length - 1].thumb : '';
                         return `
                             <div class="photo-card" onclick="openPhotoAlbum(${idx})">
-                                <div class="photo-thumb"><div class="photo-thumb-inner">${cover ? `<img src="${cover}" alt="">` : '📷'}</div></div>
+                                <div class="photo-thumb"><div class="photo-thumb-inner">${cover ? `<img src="${escapeFavoriteHtml(cover)}" alt="">` : '📷'}</div></div>
                                 <div class="photo-card-label">${escapeFavoriteHtml(album.name)}<span class="photo-card-num">(${album.photos.length})</span></div>
                             </div>`;
                     }).join('')}</div>`;
@@ -4402,7 +4405,7 @@
                 } else {
                     area.innerHTML = `<div class="photo-grid">${album.photos.map((photo, idx) => `
                         <div class="photo-card" onclick="openPhotoDetail(${idx})">
-                            <div class="photo-thumb"><div class="photo-thumb-inner"><img src="${photo.thumb}" alt=""></div></div>
+                            <div class="photo-thumb"><div class="photo-thumb-inner"><img src="${escapeFavoriteHtml(photo.thumb)}" alt=""></div></div>
                             <div class="photo-card-label">${photo.caption ? escapeFavoriteHtml(photo.caption) : '<span style="color:#aaa;">(설명 없음)</span>'}</div>
                         </div>`).join('')}</div>`;
                 }
@@ -4443,10 +4446,10 @@
             document.getElementById('photo-detail-position').innerText = `${currentPhotoIndex + 1} / ${album.photos.length}`;
             document.getElementById('photo-detail-date').innerText = photo.date;
             const frame = document.getElementById('photo-detail-frame');
-            frame.innerHTML = `<img src="${photo.thumb}" alt="" style="filter: blur(1px); opacity: 0.7;">`;
+            frame.innerHTML = `<img src="${escapeFavoriteHtml(photo.thumb)}" alt="" style="filter: blur(1px); opacity: 0.7;">`;
             loadFullPhoto(photo.id).then(url => {
                 if (url && photoAlbums[currentPhotoAlbumIndex] && photoAlbums[currentPhotoAlbumIndex].photos[currentPhotoIndex] === photo) {
-                    frame.innerHTML = `<img src="${url}" alt="">`;
+                    frame.innerHTML = `<img src="${escapeFavoriteHtml(url)}" alt="">`;
                 }
             });
             document.getElementById('photo-detail-caption').innerText = photo.caption || '';
@@ -4630,8 +4633,8 @@
                 skinListHtml += `
                     <div class="win98-btn" style="width: 100%; text-align: left; padding: 6px 8px; font-weight: normal; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="selectSkinByIndex(${idx})">
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <img src="${skin.url}" alt="${skin.name}" style="width: 40px; height: 30px; object-fit: cover; border: 1px solid #808080;">
-                            <span style="font-weight: bold; color: #222;">🏡 ${skin.name}</span>
+                            <img src="${escapeFavoriteHtml(skin.url)}" alt="${escapeFavoriteHtml(skin.name)}" style="width: 40px; height: 30px; object-fit: cover; border: 1px solid #808080;">
+                            <span style="font-weight: bold; color: #222;">🏡 ${escapeFavoriteHtml(skin.name)}</span>
                         </div>
                         <span style="font-size: 10px; color: #000080; text-decoration: underline;">적용</span>
                     </div>
@@ -4656,7 +4659,7 @@
             if (skin) {
                 applyMiniroomSkin(skin.url);
                 closeWin98Modal();
-                showWin98Alert(`"${skin.name}" 스킨이 적용되었습니다!`, '변경 완료');
+                showWin98Alert(`"${escapeFavoriteHtml(skin.name)}" 스킨이 적용되었습니다!`, '변경 완료');
             }
         }
 
@@ -4782,7 +4785,7 @@
 
             diaryCategories.forEach(cat => {
                 const isActive = (currentFilterCategory === cat) ? 'active-sub' : '';
-                html += `<li class="${isActive}" onclick="filterDiaryByCategory('${cat}', this)" oncontextmenu="handleCategoryContextMenu(event, '${cat}', false)">${cat}</li>`;
+                html += `<li class="${isActive}" onclick="filterDiaryByCategory(${jsArg(cat)}, this)" oncontextmenu="handleCategoryContextMenu(event, ${jsArg(cat)}, false)">${escapeFavoriteHtml(cat)}</li>`;
             });
             categoryListUl.innerHTML = html;
         }
@@ -4842,7 +4845,7 @@
                 const checked = (idx === 0 || cat === selectedDiaryCategory) ? 'checked' : '';
                 html += `
                     <label class="category-radio-item" style="font-size:12px; color:#333; margin-bottom:6px; display:flex; align-items:center; gap:6px; cursor:pointer;">
-                        <input type="radio" name="diary-category-radio" value="${cat}" ${checked}> ${cat}
+                        <input type="radio" name="diary-category-radio" value="${escapeFavoriteHtml(cat)}" ${checked}> ${escapeFavoriteHtml(cat)}
                     </label>
                 `;
             });
@@ -4928,12 +4931,12 @@
                     <div class="diary-card">
                         <div class="diary-card-header">
                             <div>
-                                <span class="diary-date-badge">${diary.date}</span>
-                                <span class="diary-category-badge">${diary.category}</span>
+                                <span class="diary-date-badge">${escapeFavoriteHtml(diary.date)}</span>
+                                <span class="diary-category-badge">${escapeFavoriteHtml(diary.category)}</span>
                             </div>
                             <a href="#" class="diary-detail-link" onclick="viewDiaryDetail(${actualIndex})">자세히 보러 가기 &gt;</a>
                         </div>
-                        <div class="diary-card-title">제목 : ${diary.title}</div>
+                        <div class="diary-card-title">제목 : ${escapeFavoriteHtml(diary.title)}</div>
                     </div>
                 `;
             });
@@ -4994,10 +4997,10 @@
                 const post = item.post;
                 const isShared = item.kind === 'shared';
                 const author = isShared ? cachedNickname(post.authorId, post.authorName) : (post.author || '미니홈피 주인');
-                const openCall = isShared ? `viewSharedBoardPost('${item.ref}')` : `viewBoardDetail(${item.ref})`;
+                const openCall = isShared ? `viewSharedBoardPost(${jsArg(item.ref)})` : `viewBoardDetail(${Number(item.ref)})`;
                 html += `
                     <tr>
-                        <td style="text-align: center;"><input type="checkbox" class="board-row-check" data-kind="${item.kind}" data-ref="${item.ref}"></td>
+                        <td style="text-align: center;"><input type="checkbox" class="board-row-check" data-kind="${item.kind === 'shared' ? 'shared' : 'local'}" data-ref="${escapeFavoriteHtml(item.ref)}"></td>
                         <td style="text-align: center;">${items.length - i}</td>
                         <td style="cursor: pointer; font-weight: bold;" onclick="${openCall}">${escapeFavoriteHtml(post.title)} ${isShared
                             ? '<span class="board-shared-tag">자유게시판</span>'
@@ -5107,7 +5110,7 @@
             let html = `<li class="${currentGuestbookFilter === '전체보기' ? 'active-sub' : ''}" onclick="filterGuestbookByCategory('전체보기', this)">전체보기</li>`;
             guestbookCategories.forEach(cat => {
                 const isActive = (currentGuestbookFilter === cat) ? 'active-sub' : '';
-                html += `<li class="${isActive}" onclick="filterGuestbookByCategory('${cat}', this)">${cat}</li>`;
+                html += `<li class="${isActive}" onclick="filterGuestbookByCategory(${jsArg(cat)}, this)">${escapeFavoriteHtml(cat)}</li>`;
             });
             list.innerHTML = html;
 
@@ -5115,7 +5118,7 @@
             if (select) {
                 let selHtml = '';
                 guestbookCategories.forEach(cat => {
-                    selHtml += `<option value="${cat}">${cat}</option>`;
+                    selHtml += `<option value="${escapeFavoriteHtml(cat)}">${escapeFavoriteHtml(cat)}</option>`;
                 });
                 select.innerHTML = selHtml;
             }
@@ -5462,7 +5465,7 @@
                     <div class="guestbook-item">
                         <div class="guestbook-header">
                             <span><b>No.${guestbooks.indexOf(gb) + 1}</b> ${formatGuestbookName(gb)} <span style="color:#777; font-size:10px;">(${escapeFavoriteHtml(gb.category)})</span></span>
-                            <span style="font-size: 10px; color: #666;">${gb.date}</span>
+                            <span style="font-size: 10px; color: #666;">${escapeFavoriteHtml(gb.date)}</span>
                         </div>
                         <div class="guestbook-body">
                             <div class="guestbook-avatar">${avatarHtml}</div>
@@ -5689,6 +5692,17 @@
             userCache[myId] = { nickname: myInfo.nickname || myId, avatar: (myInfo.profile && myInfo.profile.avatar) || '' };
 
             isOwner = (myId === hompyOwnerId);
+
+            // 미니홈피는 주인과 친구만 볼 수 있어요.
+            if (!isOwner) {
+                const friendSnap = await fbDb.ref('user_friends/' + hompyOwnerId + '/' + myId).once('value');
+                if (friendSnap.val() !== true) {
+                    const nick = escapeFavoriteHtml(ownerInfo.nickname || hompyOwnerId);
+                    showHompyGate(`<b>${nick}</b>님의 미니홈피는 친구만 볼 수 있어요.<br>메신저에서 친구 추가를 해 보세요!`, true);
+                    hompyBootStarted = false;
+                    return;
+                }
+            }
             isVisitorMode = !isOwner;
             document.body.classList.toggle('is-visitor', !isOwner);
 
