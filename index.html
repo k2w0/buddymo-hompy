@@ -678,6 +678,39 @@
             vertical-align: 1px;
         }
 
+        .board-notice-row td {
+            background: #f1f7f4;
+        }
+
+        .board-notice-tag {
+            display: inline-block;
+            padding: 1px 4px;
+            background: #c0392b;
+            color: #fff;
+            font-size: 9px;
+            font-weight: bold;
+            border-radius: 2px;
+            white-space: nowrap;
+        }
+
+        #detail-content-body .notice-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.7;
+        }
+
+        #detail-content-body .notice-text a {
+            color: #2e5944;
+            word-break: break-all;
+        }
+
+        #detail-content-body img.notice-img {
+            max-height: none;
+            margin: 8px 0 12px;
+            border: 1px solid #b2c9be;
+            box-shadow: 2px 2px 0 #e1ece5;
+        }
+
         .detail-author-link {
             color: #2e5944;
             text-decoration: underline;
@@ -5021,6 +5054,17 @@
             `;
             items.forEach((item, i) => {
                 const post = item.post;
+                if (item.kind === 'notice') {
+                    html += `
+                    <tr class="board-notice-row">
+                        <td></td>
+                        <td style="text-align: center;"><span class="board-notice-tag">📢 공지</span></td>
+                        <td style="cursor: pointer; font-weight: bold;" onclick="viewAdminNotice()">${escapeFavoriteHtml(post.title)}</td>
+                        <td>${escapeFavoriteHtml(post.author)}</td>
+                        <td style="font-size: 10px; color: #666;">${escapeFavoriteHtml(post.date)}</td>
+                    </tr>`;
+                    return;
+                }
                 const isShared = item.kind === 'shared';
                 const author = isShared ? cachedNickname(post.authorId, post.authorName) : (post.author || '미니홈피 주인');
                 const openCall = isShared ? `viewSharedBoardPost(${jsArg(item.ref)})` : `viewBoardDetail(${Number(item.ref)})`;
@@ -5943,7 +5987,11 @@
                     items.push({ kind: 'shared', ref: key, post: { ...post, category: SHARED_BOARD_NAME }, ts: post.timestamp || 0 });
                 });
             }
-            return items.sort((a, b) => b.ts - a.ts);
+            items.sort((a, b) => b.ts - a.ts);
+            if (currentBoardFilter === '전체보기' || currentBoardFilter === SHARED_BOARD_NAME) {
+                items.unshift({ kind: 'notice', ref: 'notice', post: { ...ADMIN_NOTICE, category: SHARED_BOARD_NAME }, ts: Infinity });
+            }
+            return items;
         }
 
         function updateBoardBadge() {
@@ -6166,6 +6214,53 @@
                 updateStatsDisplay();
                 saveDirtyState();
                 showWin98Alert('게시글이 [스크랩] 카테고리에 저장되었습니다!');
+            };
+        })();
+
+        /* ===== 관리자 공지 (자유게시판 맨 위 고정) =====
+           내용과 그림(notice 폴더)은 코드에 들어 있어서 아무도 지우거나 바꿀 수 없어요.
+           내용을 고치려면 아래 ADMIN_NOTICE 를 수정하세요. (웹용·모바일용 홈피 둘 다) */
+        const ADMIN_NOTICE = {
+            "title": "📢 [공지] 버디버디 사용법 & 꼭 알아 둘 주의사항",
+            "author": "관리자",
+            "date": "2026-11-19 17:20",
+            "html": "<div class=\"notice-text\">안녕하세요, 버디버디 관리자예요 🌿\n버디버디를 쓰면서 잘 모를 만한 기능이랑 주의사항을 정리했어요.\n처음 오신 분도, 원래 쓰던 분도 한 번씩 읽어 주세요!\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 1. 비밀번호를 잊어버렸을 때를 위해 &quot;이메일 등록&quot;을 꼭 해 두세요\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저에서 내 사진(아바타)을 누르면 [내 정보 설정] 창이 열려요.\n▶ 아래쪽 [이메일 등록] → 이메일과 현재 비밀번호 입력 → [확인 메일 보내기]\n▶ 메일함에 온 링크를 눌러야 등록이 끝나요. (스팸함도 확인해 주세요!)\n▶ 링크를 누르고 나면 한 번 로그아웃될 수 있어요. 아이디로 다시 로그인하면 돼요.</div>\n<img class=\"notice-img\" src=\"notice/1-profile.png\" alt=\"내 정보 설정 창의 이메일 등록 버튼\">\n<div class=\"notice-text\">▶ 비밀번호를 잊으면: 로그인 화면 [비밀번호 찾기] → 아이디 입력\n   → 등록한 이메일로 온 메일에서 새 비밀번호(6자리 이상)를 정하면 끝!\n▶ 이메일을 등록하지 않았다면 관리자에게 따로 말해 주세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 2. 비밀번호는 여기서만 쓰는 걸로!\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 버디버디는 친구들끼리 쓰려고 직접 만든 사이트예요.\n   다른 사이트(포털, 은행, SNS 등)에서 쓰는 비밀번호는 절대 쓰지 마세요.\n▶ 이미 그런 비밀번호를 쓰고 있다면 [내 정보 설정] → [비밀번호 변경]으로 바꿔 주세요.\n▶ 비밀번호는 관리자도 볼 수 없어요. 누가 물어봐도 알려 주지 마세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 3. 친구 추가 &amp; 미니홈피 가기\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저 [➕ 친구추가]에 친구 아이디를 넣으면 요청이 가고, 상대가 수락하면 서로 친구가 돼요.\n▶ 메신저의 [홈피] 탭에서 내 홈피와 친구들 홈피를 바로 열 수 있어요.</div>\n<img class=\"notice-img\" src=\"notice/2-messenger-hompy.png\" alt=\"메신저 홈피 탭\">\n<div class=\"notice-text\">▶ 홈피에서 메신저로 돌아갈 때는 맨 위 제목줄의 [💬 메신저] 버튼을 누르세요.\n   (휴대폰은 위쪽 메뉴 줄 맨 앞에 있어요)\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 4. 일촌 맺기 (일촌명 폴더)\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 내 홈피 [홈] 화면 일촌 칸의 [+ 일촌 관리]를 누르세요.\n▶ [일촌명 추가]로 &quot;단짝&quot;, &quot;베프&quot; 같은 일촌명을 만들고,\n   그 일촌명의 [+친구]를 눌러 메신저 친구를 넣으면 돼요. (여러 명도 가능!)</div>\n<img class=\"notice-img\" src=\"notice/3-ilchon-manage.png\" alt=\"일촌 관리 창\">\n<div class=\"notice-text\">▶ 홈 화면에서 일촌명을 누르면 친구 목록이 펼쳐지고,\n   친구 이름을 누르면 그 친구 홈피로 바로 이동해요. (파도타기 🌊)\n▶ 일촌으로 넣은 친구가 방명록을 쓰면, 이름 앞에 회색으로 일촌명이 붙어요.</div>\n<img class=\"notice-img\" src=\"notice/4-home-ilchon.png\" alt=\"홈 화면 일촌 칸\">\n<div class=\"notice-text\">━━━━━━━━━━━━━━━━━━━━━━\n■ 5. 자유게시판은 모두의 게시판이에요\n━━━━━━━━━━━━━━━━━━━━━━\n▶ [게시판] → 글쓰기에서 카테고리를 &quot;자유게시판&quot;으로 고르면\n   버디버디의 모든 사람 홈피 게시판에 함께 올라가요.\n▶ 다른 카테고리로 쓴 글은 내 홈피 게시판에만 올라가요.\n▶ 자유게시판 글은 쓴 사람만 지울 수 있어요. 수정 기능은 없으니, 고치고 싶으면 지우고 다시 써 주세요.</div>\n<img class=\"notice-img\" src=\"notice/5-board-write.png\" alt=\"자유게시판 글쓰기\">\n<div class=\"notice-text\">━━━━━━━━━━━━━━━━━━━━━━\n■ 6. 꼭 알아 두세요 ⚠️\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 미니홈피(다이어리, 사진첩, 방명록 포함)는 &quot;서로 친구인 사람&quot;만 볼 수 있어요.\n   대신 친구라면 다이어리까지 전부 볼 수 있으니, 혼자만 보고 싶은 내용은 쓰지 마세요!\n▶ 친구를 끊으면 그 순간부터 서로의 홈피를 볼 수 없어요.\n▶ 주소, 전화번호, 학교 같은 개인정보는 올리지 않는 걸 추천해요.\n▶ 사진은 올릴 때 자동으로 작게 줄여서 저장돼요.\n   무료로 운영 중이라 저장 공간이 넉넉하지 않으니, 너무 많이 올리지 말아 주세요 🙏\n▶ 주크박스에 내 컴퓨터 음악 파일을 올리면, 그 창에서만 재생되고 저장되지 않아요.\n▶ 휴대폰에서는 다이어리 카테고리를 꾹 길게 누르면 이름 변경/삭제 메뉴가 나와요.\n▶ 화면이 이상하거나 새 기능이 안 보이면 새로고침(PC는 Ctrl + F5)을 해 주세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 주소 모음\n━━━━━━━━━━━━━━━━━━━━━━\n💻 PC 메신저: <a href=\"https://k2w0.github.io/buddybudddy/\" target=\"_blank\" rel=\"noopener\">https://k2w0.github.io/buddybudddy/</a>\n📱 휴대폰 메신저: <a href=\"https://k2w0.github.io/buddy-mobile/\" target=\"_blank\" rel=\"noopener\">https://k2w0.github.io/buddy-mobile/</a>\n\n궁금한 점이나 고장 난 곳은 관리자에게 메신저로 알려 주세요.\n즐거운 버디버디 되세요! 🌿</div>"
+        };
+
+        let isViewingNotice = false;
+
+        function viewAdminNotice() {
+            isViewingNotice = true;
+            currentViewingSharedKey = null;
+            currentViewingPostIndex = null;
+            document.getElementById('detail-title-text').innerText = ADMIN_NOTICE.title;
+            document.getElementById('detail-author-text').innerHTML = `${escapeFavoriteHtml(ADMIN_NOTICE.author)} <span class="board-notice-tag">📢 공지</span>`;
+            document.getElementById('detail-date-text').innerText = ADMIN_NOTICE.date;
+            document.getElementById('detail-scrap-count').innerText = '-';
+            document.getElementById('detail-content-body').innerHTML = ADMIN_NOTICE.html;
+            setBoardDetailDeleteVisible(false);
+            document.getElementById('board-sub-list').style.display = 'none';
+            document.getElementById('board-sub-write').style.display = 'none';
+            document.getElementById('board-sub-detail').style.display = 'flex';
+            const detailBox = document.getElementById('detail-content-body');
+            if (detailBox && detailBox.parentElement) detailBox.parentElement.scrollTop = 0;
+        }
+
+        (function patchNoticeFlags() {
+            ['viewBoardDetail', 'viewSharedBoardPost', 'backToBoardList'].forEach(name => {
+                const original = window[name];
+                window[name] = function () {
+                    isViewingNotice = false;
+                    return original.apply(this, arguments);
+                };
+            });
+            const originalScrap = window.executeScrapPost;
+            window.executeScrapPost = function () {
+                if (isViewingNotice) {
+                    showWin98Alert('공지는 스크랩할 수 없어요.');
+                    return;
+                }
+                return originalScrap.apply(this, arguments);
             };
         })();
 
