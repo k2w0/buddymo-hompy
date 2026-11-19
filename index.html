@@ -3792,6 +3792,7 @@
                                         </select>
                                         <span class="board-write-shared-note" id="board-write-shared-note"></span>
                                         <select id="board-write-visibility" class="board-select vis-select" title="공개 설정"><option value="private">🔒 비공개</option><option value="friends">👥 친구공개</option><option value="public">🌐 전체공개</option></select>
+                                        <label id="board-write-notice-row" class="vis-row" style="display:none;"><input type="checkbox" id="board-write-notice"> 📢 공지로 등록</label>
                                     </div>
                                     <input type="text" id="board-write-title" class="board-title-input"
                                         placeholder="제목을 입력하세요">
@@ -5872,12 +5873,13 @@
                     return;
                 }
                 const isShared = item.kind === 'shared';
-                const author = isShared ? cachedNickname(post.authorId, post.authorName) : (post.author || '미니홈피 주인');
+                const author = isShared ? boardAuthorName(post) : (post.author || '미니홈피 주인');
                 const openCall = isShared ? `viewSharedBoardPost(${jsArg(item.ref)})` : `viewBoardDetail(${Number(item.ref)})`;
+                const sharedNotice = isShared && post.notice;
                 html += `
-                    <tr>
+                    <tr class="${sharedNotice ? 'board-notice-row' : ''}">
                         <td style="text-align: center;"><input type="checkbox" class="board-row-check" data-kind="${item.kind === 'shared' ? 'shared' : 'local'}" data-ref="${escapeFavoriteHtml(item.ref)}"></td>
-                        <td style="text-align: center;">${items.length - i}</td>
+                        <td style="text-align: center;">${sharedNotice ? '<span class="board-notice-tag">📢 공지</span>' : items.length - i}</td>
                         <td style="cursor: pointer; font-weight: bold;" onclick="${openCall}">${escapeFavoriteHtml(post.title)} ${isShared
                             ? '<span class="board-shared-tag">자유게시판</span>'
                             : `<span style="font-size:9px; color:#888; font-weight:normal;">[${escapeFavoriteHtml(post.category)}]</span>${visBadge(post, 'friends')}`}</td>
@@ -6782,7 +6784,8 @@
                     items.push({ kind: 'shared', ref: key, post: { ...post, category: SHARED_BOARD_NAME }, ts: post.timestamp || 0 });
                 });
             }
-            items.sort((a, b) => b.ts - a.ts);
+            const isSharedNotice = it => it.kind === 'shared' && it.post && it.post.notice ? 1 : 0;
+            items.sort((a, b) => (isSharedNotice(b) - isSharedNotice(a)) || (b.ts - a.ts));
             if (currentBoardFilter === '전체보기' || currentBoardFilter === SHARED_BOARD_NAME) {
                 items.unshift({ kind: 'notice', ref: 'notice', post: { ...ADMIN_NOTICE, category: SHARED_BOARD_NAME }, ts: Infinity });
             }
@@ -6807,17 +6810,17 @@
             if (!post) return;
             currentViewingSharedKey = key;
             currentViewingPostIndex = null;
-            const authorName = cachedNickname(post.authorId, post.authorName);
+            const authorName = boardAuthorName(post);
             document.getElementById('detail-title-text').innerText = post.title;
             const authorEl = document.getElementById('detail-author-text');
             authorEl.innerHTML = `<span class="detail-author-link" title="${escapeFavoriteHtml(authorName)}님의 미니홈피로 이동">${escapeFavoriteHtml(authorName)}</span> <span class="board-shared-tag">자유게시판</span>`;
             authorEl.querySelector('.detail-author-link').onclick = () => {
-                if (post.authorId !== hompyOwnerId) location.href = hompyUrlOf(post.authorId);
+                if (post.authorId !== hompyOwnerId && post.authorId !== BOARD_ADMIN_ID) location.href = hompyUrlOf(post.authorId);
             };
             document.getElementById('detail-date-text').innerText = post.date || '';
             document.getElementById('detail-scrap-count').innerText = post.scrapCount || 0;
             document.getElementById('detail-content-body').innerHTML = post.content ? DOMPurify.sanitize(post.content) : '내용이 없습니다.';
-            setBoardDetailDeleteVisible(post.authorId === myId);
+            setBoardDetailDeleteVisible(canManageSharedPost(post));
             document.getElementById('board-sub-list').style.display = 'none';
             document.getElementById('board-sub-write').style.display = 'none';
             document.getElementById('board-sub-detail').style.display = 'flex';
@@ -6844,7 +6847,7 @@
             if (currentViewingSharedKey) {
                 const key = currentViewingSharedKey;
                 const post = sharedBoardPosts[key];
-                if (!post || post.authorId !== myId) return;
+                if (!post || !canManageSharedPost(post)) return;
                 showWin98Confirm('자유게시판에서 이 글을 삭제하시겠습니까?<br>모든 친구의 홈피에서 사라져요.', function () {
                     fbDb.ref('public_board/' + key).remove().then(() => {
                         backToBoardList();
@@ -6877,7 +6880,7 @@
                 return;
             }
             const localIdx = isOwner ? rows.filter(r => r.kind === 'local').map(r => Number(r.ref)) : [];
-            const sharedKeys = rows.filter(r => r.kind === 'shared' && sharedBoardPosts[r.ref] && sharedBoardPosts[r.ref].authorId === myId).map(r => r.ref);
+            const sharedKeys = rows.filter(r => r.kind === 'shared' && canManageSharedPost(sharedBoardPosts[r.ref])).map(r => r.ref);
             const skipped = rows.length - localIdx.length - sharedKeys.length;
             if (localIdx.length + sharedKeys.length === 0) {
                 showWin98Alert('내가 쓴 글만 삭제할 수 있어요.');
@@ -6971,7 +6974,8 @@
                 const now = new Date();
                 fbDb.ref('public_board').push({
                     authorId: myId,
-                    authorName: currentVisitorProfile.name,
+                    authorName: isBoardAdmin() ? '관리자' : currentVisitorProfile.name,
+                    ...(isBoardAdmin() && document.getElementById('board-write-notice') && document.getElementById('board-write-notice').checked ? { notice: true } : {}),
                     title,
                     content,
                     date: formatLocalDateTime(now),
@@ -6997,7 +7001,7 @@
                 boardPosts.push({
                     category: '스크랩',
                     title: `[스크랩] ${post.title}`,
-                    author: cachedNickname(post.authorId, post.authorName),
+                    author: boardAuthorName(post),
                     date: formatLocalDateTime(new Date()),
                     content: post.content,
                     scrapCount: 0,
@@ -7831,19 +7835,19 @@
             const items = [{ kind: 'notice', title: String(ADMIN_NOTICE.title).replace(/^📢\s*/, ''), date: ADMIN_NOTICE.date, ts: dateToTimestamp(ADMIN_NOTICE.date), pinned: true }];
             Object.keys(sharedBoardPosts || {}).forEach(key => {
                 const post = sharedBoardPosts[key];
-                if (post && post.authorId === NEWS_ADMIN_ID) {
-                    items.push({ kind: 'shared', key, title: post.title, date: post.date, ts: post.timestamp || dateToTimestamp(post.date) });
+                if (post && (post.authorId === NEWS_ADMIN_ID || post.notice)) {
+                    items.push({ kind: 'shared', key, title: post.title, date: post.date, ts: post.timestamp || dateToTimestamp(post.date), notice: !!post.notice });
                 }
             });
-            const pinned = items.filter(i => i.pinned);
-            const rest = items.filter(i => !i.pinned).sort((a, b) => b.ts - a.ts);
+            const pinned = items.filter(i => i.pinned).concat(items.filter(i => !i.pinned && i.notice).sort((a, b) => b.ts - a.ts));
+            const rest = items.filter(i => !i.pinned && !i.notice).sort((a, b) => b.ts - a.ts);
             const shown = pinned.concat(rest).slice(0, NEWS_MAX);
             const now = Date.now();
             list.innerHTML = shown.map(item => {
                 const isNew = item.ts && now - item.ts < 3 * 24 * 60 * 60 * 1000;
                 const call = item.kind === 'notice' ? 'openNewsItem(\'notice\')' : `openNewsItem('shared', ${jsArg(item.key)})`;
                 return `<li class="home-news-item" onclick="${call}" title="${escapeFavoriteHtml(item.title)}">
-                    <span class="home-news-tag">${item.kind === 'notice' ? '📢' : '📝'}</span>
+                    <span class="home-news-tag">${item.kind === 'notice' || item.notice ? '📢' : '📝'}</span>
                     <span class="home-news-title">${escapeFavoriteHtml(item.title)}</span>
                     ${isNew ? '<span class="home-news-new">N</span>' : ''}
                     <span class="home-news-date">${escapeFavoriteHtml(newsShortDate(item.date))}</span>
@@ -7868,6 +7872,154 @@
                 return result;
             };
             renderHomeNews();
+        })();
+    </script>
+    <script>
+        /* ===== 자유게시판 관리자 기능 =====
+           - 관리자 아이디로 쓴 글은 "관리자"로 보여요 (아이디/홈피 링크 숨김)
+           - 관리자: 📢 공지로 등록/해제, 모든 글 수정, 다른 사람 글 삭제 (보안 규칙도 관리자만 허용) */
+        const BOARD_ADMIN_ID = 'heartBROKENPlaYBoY';
+
+        function isBoardAdmin() {
+            return typeof myId !== 'undefined' && myId === BOARD_ADMIN_ID;
+        }
+
+        function boardAuthorName(post) {
+            if (!post) return '';
+            if (post.authorId === BOARD_ADMIN_ID) return '관리자';
+            return cachedNickname(post.authorId, post.authorName);
+        }
+
+        function canManageSharedPost(post) {
+            return !!post && (post.authorId === myId || isBoardAdmin());
+        }
+
+        function ensureBoardAdminButtons() {
+            const del = document.getElementById('board-detail-delete-btn');
+            if (!del || document.getElementById('board-admin-edit-btn')) return;
+            const noticeBtn = document.createElement('button');
+            noticeBtn.className = 'board-btn';
+            noticeBtn.id = 'board-admin-notice-btn';
+            noticeBtn.style.display = 'none';
+            noticeBtn.onclick = toggleSharedPostNotice;
+            const editBtn = document.createElement('button');
+            editBtn.className = 'board-btn';
+            editBtn.id = 'board-admin-edit-btn';
+            editBtn.style.display = 'none';
+            editBtn.innerText = '수정';
+            editBtn.onclick = openEditSharedPost;
+            del.parentElement.insertBefore(noticeBtn, del);
+            del.parentElement.insertBefore(editBtn, del);
+        }
+
+        function syncBoardAdminButtons() {
+            ensureBoardAdminButtons();
+            const noticeBtn = document.getElementById('board-admin-notice-btn');
+            const editBtn = document.getElementById('board-admin-edit-btn');
+            if (!noticeBtn || !editBtn) return;
+            const post = currentViewingSharedKey ? sharedBoardPosts[currentViewingSharedKey] : null;
+            const show = !!post && isBoardAdmin() && !(typeof isViewingNotice !== 'undefined' && isViewingNotice);
+            noticeBtn.style.display = show ? '' : 'none';
+            editBtn.style.display = show ? '' : 'none';
+            if (show) noticeBtn.innerText = post.notice ? '공지 해제' : '📢 공지로 등록';
+        }
+
+        function toggleSharedPostNotice() {
+            if (!isBoardAdmin() || !currentViewingSharedKey) return;
+            const key = currentViewingSharedKey;
+            const post = sharedBoardPosts[key];
+            if (!post) return;
+            const next = !post.notice;
+            fbDb.ref('public_board/' + key + '/notice').set(next ? true : null).then(() => {
+                if (sharedBoardPosts[key]) {
+                    if (next) sharedBoardPosts[key].notice = true; else delete sharedBoardPosts[key].notice;
+                }
+                showWin98Alert(next ? '📢 공지로 등록했어요.<br>게시판 맨 위와 홈 Updated news에 보여요.' : '공지를 해제했어요.', '공지');
+                syncBoardAdminButtons();
+            }).catch(() => showWin98Alert('공지 설정을 바꾸지 못했어요.'));
+        }
+
+        function openEditSharedPost() {
+            if (!isBoardAdmin() || !currentViewingSharedKey) return;
+            const key = currentViewingSharedKey;
+            const post = sharedBoardPosts[key];
+            if (!post) return;
+            const overlay = document.getElementById('win98-modal-overlay');
+            document.getElementById('win98-title').innerText = '게시글 수정 (관리자)';
+            document.getElementById('win98-dialog-content').innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:6px; width:100%; text-align:left;">
+                    <div style="font-size:10px; color:#777;">글쓴이: ${escapeFavoriteHtml(boardAuthorName(post))}</div>
+                    <input type="text" id="board-edit-title" class="board-title-input" maxlength="100" style="box-sizing:border-box; width:100%;">
+                    <div id="board-edit-content" class="board-content-editor" contenteditable="true" style="box-sizing:border-box; width:100%; min-height:160px; max-height:46vh; overflow-y:auto;"></div>
+                </div>`;
+            document.getElementById('win98-dialog-buttons').innerHTML = `
+                <button class="win98-btn" id="board-edit-save">저장</button>
+                <button class="win98-btn" onclick="closeWin98Modal()">취소</button>`;
+            document.getElementById('board-edit-title').value = post.title || '';
+            document.getElementById('board-edit-content').innerHTML = post.content ? DOMPurify.sanitize(post.content) : '';
+            overlay.style.display = 'flex';
+            document.getElementById('board-edit-save').onclick = function () {
+                const title = document.getElementById('board-edit-title').value.trim();
+                const content = document.getElementById('board-edit-content').innerHTML.trim();
+                if (!title) { showWin98Alert('제목을 입력하세요.'); return; }
+                if (!content) { showWin98Alert('내용을 입력하세요.'); return; }
+                if (content.length > 900000) { showWin98Alert('글이 너무 커요. 사진 수를 줄여 주세요.'); return; }
+                this.disabled = true;
+                const changes = { title: title.slice(0, 100), content, editedAt: Date.now() };
+                fbDb.ref('public_board/' + key).update(changes).then(() => {
+                    if (sharedBoardPosts[key]) Object.assign(sharedBoardPosts[key], changes);
+                    closeWin98Modal();
+                    if (sharedBoardPosts[key]) viewSharedBoardPost(key);
+                    showWin98Alert('글을 수정했어요.', '수정 완료');
+                }).catch(() => {
+                    this.disabled = false;
+                    showWin98Alert('수정하지 못했어요. 잠시 후 다시 시도해 주세요.');
+                });
+            };
+        }
+
+        (function patchBoardAdmin() {
+            // 상세 보기: 관리자 이름 표시 + 버튼
+            const originalShared = window.viewSharedBoardPost;
+            window.viewSharedBoardPost = function (key) {
+                const result = originalShared.apply(this, arguments);
+                const post = sharedBoardPosts[key];
+                if (post && post.authorId === BOARD_ADMIN_ID) {
+                    document.getElementById('detail-author-text').innerHTML = '<b style="color:#2e5944;">관리자</b> <span class="board-shared-tag">자유게시판</span>';
+                }
+                if (post && post.notice) {
+                    document.getElementById('detail-author-text').insertAdjacentHTML('beforeend', ' <span class="board-notice-tag">📢 공지</span>');
+                }
+                if (post && post.editedAt) {
+                    document.getElementById('detail-date-text').innerText = (post.date || '') + ' (수정됨)';
+                }
+                syncBoardAdminButtons();
+                return result;
+            };
+            ['viewBoardDetail', 'viewAdminNotice', 'backToBoardList'].forEach(name => {
+                const original = window[name];
+                if (typeof original !== 'function') return;
+                window[name] = function () {
+                    const result = original.apply(this, arguments);
+                    syncBoardAdminButtons();
+                    return result;
+                };
+            });
+            // 글쓰기: 관리자는 자유게시판 글을 공지로 바로 등록 가능
+            const originalNote = window.updateBoardWriteNote;
+            window.updateBoardWriteNote = function () {
+                const result = originalNote.apply(this, arguments);
+                const row = document.getElementById('board-write-notice-row');
+                const select = document.getElementById('board-write-category-select');
+                if (row) row.style.display = isBoardAdmin() && select && select.value === SHARED_BOARD_NAME ? '' : 'none';
+                return result;
+            };
+            const originalOpen = window.openBoardWriteView;
+            window.openBoardWriteView = function () {
+                const box = document.getElementById('board-write-notice');
+                if (box) box.checked = false;
+                return originalOpen.apply(this, arguments);
+            };
         })();
     </script>
 </body>
