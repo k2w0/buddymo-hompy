@@ -674,23 +674,79 @@
             display: none;
         }
 
-        /* 플레이어를 BGM Player 바로 아래에 붙여요 (떠 있는 창 X) */
+        /* 외부 플레이어 칸: BGM Player 바로 아래, 같은 모양의 작은 칸 */
         .music-player-window.docked {
             position: static;
-            width: 204px;
-            box-sizing: border-box;
+            width: 200px;
             z-index: auto;
+            background-color: #eaf2ed;
+            border: 2px solid;
+            border-color: #dfdfdf #808080 #808080 #dfdfdf;
+            padding: 6px;
             box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+            font-size: 10px;
+            color: #333;
         }
 
         .music-player-window.docked .music-player-titlebar {
+            background: white;
+            color: #333;
+            font-weight: normal;
+            border: 1px solid #a3c1b3;
+            padding: 3px;
+            margin-bottom: 6px;
+            justify-content: flex-start;
+            gap: 4px;
+        }
+
+        .music-player-window.docked .music-player-titlebar button {
             display: none;
+        }
+
+        .music-player-window.docked #music-player-frame {
+            border: 1px solid #a3c1b3;
+            background: #fff;
+        }
+
+        .music-player-foot {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 6px;
+            margin-top: 5px;
+        }
+
+        .music-player-foot .music-player-note {
+            padding: 0;
+            font-size: 9px;
+            color: #666;
+        }
+
+        .music-player-foot .music-player-label {
+            font-size: 9px;
+            color: #555;
+            white-space: nowrap;
+            margin-left: auto;
+        }
+
+        /* 오른쪽 칸 세 개 너비 맞추기 (유튜브 화면은 최소 200px) */
+        .right-side-panel .cy-home-top-box {
+            width: 198px;
+        }
+
+        .right-side-panel .right-bgm-widget {
+            width: 200px;
         }
 
         @media (max-width: 700px) {
             .music-player-window.docked {
                 width: auto;
-                min-width: 204px;
+                min-width: 200px;
+            }
+
+            .right-side-panel .cy-home-top-box,
+            .right-side-panel .right-bgm-widget {
+                width: auto;
             }
         }
 
@@ -7186,7 +7242,11 @@
         /* ---------- 플레이어 창 ---------- */
         function showMusicPlayerWindow(song) {
             const win = document.getElementById('music-player-window');
-            document.getElementById('music-player-title').innerText = `🎵 ${song.title} - ${song.artist}`;
+            const svc = MUSIC_SERVICES[songSource(song)];
+            const svcName = songSource(song) === 'youtube' && song.music ? 'YouTube Music' : svc.name;
+            document.getElementById('music-player-title').innerHTML = win.classList.contains('docked')
+                ? `<span class="music-src" style="background:${svc.color};">${svc.icon}</span>${escapeFavoriteHtml(svcName)} 플레이어`
+                : escapeFavoriteHtml(`🎵 ${song.title} - ${song.artist}`);
             win.style.display = '';
         }
 
@@ -7234,7 +7294,7 @@
         async function playYouTubeSong(song, token) {
             const frame = document.getElementById('music-player-frame');
             frame.innerHTML = '<div id="music-yt-target"></div>';
-            setMusicPlayerNote(song.music ? '유튜브뮤직 곡을 유튜브 플레이어로 틀어요.' : '');
+            setMusicPlayerNote('');
             showMusicPlayerWindow(song);
             const ok = await loadYouTubeApi();
             if (token !== musicPlayToken) return;
@@ -7258,7 +7318,7 @@
                     },
                     onError: () => {
                         if (token !== musicPlayToken) return;
-                        setMusicPlayerNote('이 영상은 다른 사이트에서 재생할 수 없게 막혀 있어요. 다음 곡으로 넘어갈게요.');
+                        setMusicPlayerNote('재생이 막힌 영상이라 다음 곡으로 넘어가요');
                         setTimeout(() => { if (token === musicPlayToken) skipAfterMusicError(); }, 2500);
                     }
                 }
@@ -7266,11 +7326,11 @@
         }
 
         const EMBED_NOTES = {
-            spotify: '플레이어의 ▶를 눌러 주세요. 스포티파이에 로그인한 브라우저에서는 전체 곡, 아니면 30초 미리듣기예요.',
-            apple: '플레이어의 ▶를 눌러 주세요. 애플뮤직 구독자는 플레이어에서 로그인하면 전체 곡을 들을 수 있어요.',
-            soundcloud: '안 나오면 플레이어의 ▶를 눌러 주세요.'
+            spotify: '▶를 눌러 주세요 (로그인 안 하면 30초 미리듣기)',
+            apple: '▶를 눌러 주세요 (구독자는 위에서 로그인)',
+            soundcloud: '안 나오면 ▶를 눌러 주세요'
         };
-        const EMBED_HEIGHT = { spotify: 152, apple: 175, soundcloud: 166 };
+        const EMBED_HEIGHT = { spotify: 80, apple: 175, soundcloud: 120 };
 
         function playEmbedSong(song) {
             const src = songSource(song);
@@ -7686,6 +7746,15 @@
             if (widget && win) {
                 widget.after(win);
                 win.classList.add('docked');
+                const note = document.getElementById('music-player-note');
+                const foot = document.createElement('div');
+                foot.className = 'music-player-foot';
+                win.appendChild(foot);
+                if (note) foot.appendChild(note);
+                const label = document.createElement('span');
+                label.className = 'music-player-label';
+                label.textContent = 'External Player';
+                foot.appendChild(label);
             }
             const audioEl = document.getElementById('bgm-audio-element');
             if (audioEl) {
