@@ -57,6 +57,22 @@
             cursor: pointer;
         }
 
+        .title-bar-btns .title-messenger-btn {
+            background-color: #e2ede7;
+            color: #1b4d3e;
+            font-weight: bold;
+            padding: 0 6px;
+            margin-right: 4px;
+        }
+
+        .title-bar-btns .title-messenger-btn:hover {
+            background-color: #c9dbd3;
+        }
+
+        .menu-messenger-btn {
+            display: none;
+        }
+
         .address-bar {
             background-color: #e0e0e0;
             padding: 4px;
@@ -2390,6 +2406,14 @@
             white-space: nowrap;
         }
 
+        /* 휴대폰: 탭 줄 맨 앞의 메신저 버튼 */
+        .menu-messenger-btn {
+            display: block;
+            background: #2e5944 !important;
+            color: #fff !important;
+            border-color: #1b4d3e !important;
+        }
+
         .long-press-hint {
             font-size: 10px;
             color: #999;
@@ -2436,7 +2460,8 @@
             <div class="title-bar">
                 <span id="window-title">💻 http://www.cyworld.com/green_miniroom</span>
                 <div class="title-bar-btns">
-                    <span>_</span><span>□</span><span>×</span>
+                    <span class="title-messenger-btn" onclick="goToMessenger()" title="버디버디 메신저로 돌아가기">💬 메신저</span>
+                    <span>_</span><span>□</span><span onclick="goToMessenger()" title="닫고 메신저로 돌아가기">×</span>
                 </div>
             </div>
 
@@ -3054,6 +3079,7 @@
                     </div>
 
                     <div class="right-menu-section">
+                <div class="menu-tab-btn menu-messenger-btn" onclick="goToMessenger()">💬 메신저</div>
                         <div class="menu-tab-btn active-btn" id="btn-home" onclick="switchTab('home')">홈</div>
                         <div class="menu-tab-btn" id="btn-profile" onclick="switchTab('profile')">프로필</div>
                         <div class="menu-tab-btn" id="btn-diary" onclick="switchTab('diary')">다이어리</div>
@@ -5573,7 +5599,7 @@
                 <div class="hompy-gate-box">
                     <div class="hompy-gate-title">🌿 미니홈피</div>
                     <div class="hompy-gate-msg">${message}</div>
-                    ${showMessengerButton ? `<a class="hompy-gate-btn" href="${MESSENGER_URL}">버디버디 메신저 열기</a>` : ''}
+                    ${showMessengerButton ? `<a class="hompy-gate-btn" href="${MESSENGER_URL}" onclick="goToMessenger(); return false;">버디버디 메신저 열기</a>` : ''}
                 </div>`;
             gate.style.display = 'flex';
         }
@@ -5581,6 +5607,28 @@
         function hideHompyGate() {
             const gate = document.getElementById('hompy-gate');
             if (gate) gate.style.display = 'none';
+        }
+
+        /* ---------- 메신저로 돌아가기 ----------
+           - 메신저가 이 홈피 창을 열었으면: 홈피 창을 닫아서 메신저 화면으로 돌아가요.
+           - 홈피를 따로 열었으면(즐겨찾기 등): 이 창에서 메신저를 열어요. (로그인은 그대로 유지) */
+        function goToMessenger() {
+            let openerAlive = false;
+            try {
+                openerAlive = !!window.opener && !window.opener.closed
+                    && window.opener.location.origin === location.origin
+                    && window.opener.location.href.startsWith(MESSENGER_URL);
+            } catch (e) {
+                openerAlive = false;
+            }
+            if (openerAlive) {
+                try { window.opener.focus(); } catch (e) { }
+                window.close();
+                // 브라우저가 창 닫기를 막으면 이 창에서 메신저로 이동
+                setTimeout(function () { if (!window.closed) location.href = MESSENGER_URL; }, 400);
+                return;
+            }
+            location.href = MESSENGER_URL;
         }
 
         /* ---------- 사용자 정보 캐시 ---------- */
