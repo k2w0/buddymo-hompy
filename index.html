@@ -343,6 +343,50 @@
             color: #333;
         }
 
+        /* 홈 Updated news */
+        .home-news-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            min-width: 0;
+        }
+
+        .home-news-item:hover .home-news-title {
+            text-decoration: underline;
+            color: #2e5944;
+        }
+
+        .home-news-tag {
+            flex-shrink: 0;
+            font-size: 10px;
+        }
+
+        .home-news-title {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .home-news-new {
+            flex-shrink: 0;
+            background: #ff6b4a;
+            color: #fff;
+            font-size: 8px;
+            font-weight: bold;
+            line-height: 11px;
+            padding: 0 3px;
+            border-radius: 2px;
+        }
+
+        .home-news-date {
+            flex-shrink: 0;
+            font-size: 9px;
+            color: #999;
+        }
+
         .category-table {
             flex: 1;
             border-collapse: collapse;
@@ -3287,7 +3331,7 @@
                                 <div class="news-box">
                                     <b style="color: #2e5944;">Updated news</b> <span
                                         style="font-size:9px; color:#888;">TODAY STORY</span>
-                                    <ul>
+                                    <ul id="home-news-list">
                                         <li>· 업데이트가 없습니다. </li>
                                     </ul>
                                 </div>
@@ -7769,6 +7813,61 @@
                 });
                 audioEl.addEventListener('playing', () => { bgmErrorStreak = 0; });
             }
+        })();
+    </script>
+    <script>
+        /* ===== 홈 Updated news: 관리자 공지 + 관리자가 자유게시판에 쓴 글 (누르면 그 글로 이동) ===== */
+        const NEWS_ADMIN_ID = 'heartBROKENPlaYBoY';
+        const NEWS_MAX = 4;
+
+        function newsShortDate(text) {
+            const m = String(text || '').match(/^\d{4}-(\d{2})-(\d{2})/);
+            return m ? `${m[1]}.${m[2]}` : '';
+        }
+
+        function renderHomeNews() {
+            const list = document.getElementById('home-news-list');
+            if (!list) return;
+            const items = [{ kind: 'notice', title: String(ADMIN_NOTICE.title).replace(/^📢\s*/, ''), date: ADMIN_NOTICE.date, ts: dateToTimestamp(ADMIN_NOTICE.date), pinned: true }];
+            Object.keys(sharedBoardPosts || {}).forEach(key => {
+                const post = sharedBoardPosts[key];
+                if (post && post.authorId === NEWS_ADMIN_ID) {
+                    items.push({ kind: 'shared', key, title: post.title, date: post.date, ts: post.timestamp || dateToTimestamp(post.date) });
+                }
+            });
+            const pinned = items.filter(i => i.pinned);
+            const rest = items.filter(i => !i.pinned).sort((a, b) => b.ts - a.ts);
+            const shown = pinned.concat(rest).slice(0, NEWS_MAX);
+            const now = Date.now();
+            list.innerHTML = shown.map(item => {
+                const isNew = item.ts && now - item.ts < 3 * 24 * 60 * 60 * 1000;
+                const call = item.kind === 'notice' ? 'openNewsItem(\'notice\')' : `openNewsItem('shared', ${jsArg(item.key)})`;
+                return `<li class="home-news-item" onclick="${call}" title="${escapeFavoriteHtml(item.title)}">
+                    <span class="home-news-tag">${item.kind === 'notice' ? '📢' : '📝'}</span>
+                    <span class="home-news-title">${escapeFavoriteHtml(item.title)}</span>
+                    ${isNew ? '<span class="home-news-new">N</span>' : ''}
+                    <span class="home-news-date">${escapeFavoriteHtml(newsShortDate(item.date))}</span>
+                </li>`;
+            }).join('');
+        }
+
+        function openNewsItem(kind, key) {
+            switchTab('board');
+            if (kind === 'notice') {
+                viewAdminNotice();
+            } else if (sharedBoardPosts && sharedBoardPosts[key]) {
+                viewSharedBoardPost(key);
+            }
+        }
+
+        (function hookHomeNews() {
+            const originalRender = window.renderBoardList;
+            window.renderBoardList = function () {
+                const result = originalRender.apply(this, arguments);
+                try { renderHomeNews(); } catch (e) { console.warn(e); }
+                return result;
+            };
+            renderHomeNews();
         })();
     </script>
 </body>
