@@ -674,6 +674,26 @@
             display: none;
         }
 
+        /* 플레이어를 BGM Player 바로 아래에 붙여요 (떠 있는 창 X) */
+        .music-player-window.docked {
+            position: static;
+            width: 204px;
+            box-sizing: border-box;
+            z-index: auto;
+            box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .music-player-window.docked .music-player-titlebar {
+            display: none;
+        }
+
+        @media (max-width: 700px) {
+            .music-player-window.docked {
+                width: auto;
+                min-width: 204px;
+            }
+        }
+
         .music-tabs {
             display: flex;
             gap: 3px;
@@ -7660,6 +7680,13 @@
                 setupHompyBgm();
                 return result;
             };
+            // 뮤직 플레이어를 오른쪽 BGM Player 바로 아래에 붙여요
+            const widget = document.querySelector('.right-bgm-widget');
+            const win = document.getElementById('music-player-window');
+            if (widget && win) {
+                widget.after(win);
+                win.classList.add('docked');
+            }
             const audioEl = document.getElementById('bgm-audio-element');
             if (audioEl) {
                 audioEl.addEventListener('error', () => {
