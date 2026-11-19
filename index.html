@@ -582,6 +582,144 @@
 
 
         /* ===== 불러오는 중 / 로그인 필요 화면 ===== */
+        /* ===== 공개 설정 표시 (비공개 / 친구공개 / 전체공개) ===== */
+        .vis-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: normal;
+            line-height: 14px;
+            padding: 0 4px;
+            margin-left: 4px;
+            border-radius: 3px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .vis-badge.vis-private {
+            background: #f3ecec;
+            color: #8a4646;
+            border: 1px solid #dcc4c4;
+        }
+
+        .vis-badge.vis-friends {
+            background: #e2ede7;
+            color: #2e5944;
+            border: 1px solid #b2c9be;
+        }
+
+        .vis-badge.vis-public {
+            background: #e7eef7;
+            color: #2f5d8a;
+            border: 1px solid #bccfe4;
+        }
+
+        body.is-visitor .vis-badge {
+            display: none !important;
+        }
+
+        .vis-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #2e5944;
+            flex-shrink: 0;
+        }
+
+        .hompy-gate-box {
+            max-width: calc(100vw - 32px);
+            box-sizing: border-box;
+        }
+
+        .vis-badge.vis-corner {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            margin: 0;
+            z-index: 1;
+        }
+
+        .vis-select {
+            font-size: 11px;
+            flex-grow: 0 !important;
+            width: auto;
+        }
+
+        .vis-choice {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 6px 8px;
+            border: 1px solid #b2c9be;
+            background: #fcfdfc;
+            margin-bottom: 6px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .vis-choice small {
+            display: block;
+            color: #777;
+            font-size: 10px;
+            font-weight: normal;
+        }
+
+        /* 친구가 아닌 사람에게 보여 주는 전체공개 글 */
+        .gate-open-posts {
+            margin-top: 16px;
+            border-top: 1px dashed #a3c1b3;
+            padding-top: 12px;
+            text-align: left;
+            max-height: 52vh;
+            overflow-y: auto;
+            width: min(460px, calc(100vw - 100px));
+        }
+
+        .gate-open-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #2e5944;
+            margin-bottom: 8px;
+        }
+
+        .gate-open-post {
+            border: 1px solid #b2c9be;
+            background: #fff;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        .gate-open-post summary {
+            cursor: pointer;
+            padding: 6px 8px;
+            background: #e2ede7;
+            color: #2e5944;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .gate-open-date {
+            font-weight: normal;
+            color: #777;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+
+        .gate-open-body {
+            padding: 8px 10px;
+            color: #333;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .gate-open-body img {
+            max-width: 100%;
+            height: auto;
+        }
+
         #hompy-gate {
             position: fixed;
             inset: 0;
@@ -2127,6 +2265,275 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script>
+        /* =====================================================================
+           공개 설정: 🔒 비공개 / 👥 친구공개 / 🌐 전체공개
+           - 화면에서 숨기는 게 아니라 "저장하는 칸"을 나눠요.
+               비공개   → hompy_private/{아이디}   (주인만 읽을 수 있음)
+               친구공개 → minihompy/{아이디}       (주인 + 서로 친구)
+               전체공개 → hompy_open/{아이디}      (로그인한 버디버디 사용자 누구나, 게시글만)
+           - 그래서 친구 컴퓨터에는 비공개 글이 아예 내려가지 않아요.
+           ===================================================================== */
+        const VIS_LABEL = { private: '🔒 비공개', friends: '👥 친구공개', public: '🌐 전체공개' };
+        const VIS_DESC = {
+            private: '나만 볼 수 있어요.',
+            friends: '서로 친구인 사람만 볼 수 있어요.',
+            public: '친구가 아닌 버디버디 사용자도 볼 수 있어요.'
+        };
+        // 어떤 항목을 어느 칸에 나눠 저장하는지 (open = 전체공개 칸)
+        const SPLIT_KEYS = {
+            diaries: ['friends', 'private'],
+            boardPosts: ['open', 'friends', 'private'],
+            photoAlbums: ['friends', 'private']
+        };
+        const LOC_ROOT = { open: 'hompy_open', friends: 'minihompy', private: 'hompy_private' };
+
+        function hompyIsOwnerNow() {
+            return typeof isOwner !== 'undefined' && isOwner;
+        }
+
+        function visBadge(item, fallback) {
+            if (!hompyIsOwnerNow()) return '';
+            const v = item && VIS_LABEL[item.visibility] ? item.visibility : fallback;
+            return `<span class="vis-badge vis-${v}" title="${VIS_DESC[v]}">${VIS_LABEL[v]}</span>`;
+        }
+
+        function getDiaryFormVisibility() {
+            const el = document.getElementById('diary-form-visibility');
+            return el && el.value === 'friends' ? 'friends' : 'private';
+        }
+
+        function photoBase(visibility) {
+            return (visibility === 'private' ? 'hompy_private/' : 'minihompy/') + hompyOwnerId + '/photos/';
+        }
+
+        function locPath(loc, key) {
+            return `${LOC_ROOT[loc]}/${hompyOwnerId}/data/${key}`;
+        }
+
+        function itemLoc(key, item) {
+            const v = item && item.visibility;
+            if (v === 'private') return 'private';
+            if (v === 'public' && SPLIT_KEYS[key].includes('open')) return 'open';
+            return 'friends';
+        }
+
+        // 목록을 칸별로 나눠요. 합칠 때 순서를 지키려고 _seq(원래 순서)를 붙여요.
+        function splitItems(key, list) {
+            const parts = {};
+            SPLIT_KEYS[key].forEach(loc => { parts[loc] = []; });
+            (list || []).forEach((item, i) => {
+                parts[itemLoc(key, item)].push(Object.assign({}, item, { _seq: i }));
+            });
+            return parts;
+        }
+
+        function stripSeq(item) {
+            if (!item || typeof item !== 'object') return item;
+            const copy = Object.assign({}, item);
+            delete copy._seq;
+            return copy;
+        }
+
+        // 자동 저장: 바뀐 칸만 모아요
+        function collectSaveUpdates(key, updates, pending) {
+            if (!SPLIT_KEYS[key]) {
+                const str = JSON.stringify(HOMPY_STATE[key].get());
+                if (str !== lastSavedState[key]) {
+                    updates[`minihompy/${hompyOwnerId}/data/${key}`] = str;
+                    pending[key] = str;
+                }
+                return;
+            }
+            const parts = splitItems(key, HOMPY_STATE[key].get());
+            SPLIT_KEYS[key].forEach(loc => {
+                const str = JSON.stringify(parts[loc]);
+                const savedKey = key + '@' + loc;
+                if (str !== lastSavedState[savedKey]) {
+                    updates[locPath(loc, key)] = str;
+                    pending[savedKey] = str;
+                }
+            });
+        }
+
+        // 불러오기: 친구공개 + 전체공개 (주인은 비공개까지) 를 합쳐요
+        async function loadHompyData() {
+            const reads = [
+                fbDb.ref('minihompy/' + hompyOwnerId + '/data').once('value'),
+                fbDb.ref('hompy_open/' + hompyOwnerId + '/data').once('value')
+            ];
+            if (isOwner) reads.push(fbDb.ref('hompy_private/' + hompyOwnerId + '/data').once('value'));
+            const snaps = await Promise.all(reads);
+            const byLoc = {
+                friends: snaps[0].val() || {},
+                open: snaps[1].val() || {},
+                private: snaps[2] ? (snaps[2].val() || {}) : {}
+            };
+
+            Object.keys(HOMPY_STATE).forEach(key => {
+                if (!SPLIT_KEYS[key]) {
+                    const raw = byLoc.friends[key];
+                    if (typeof raw === 'string') {
+                        try {
+                            HOMPY_STATE[key].set(JSON.parse(raw));
+                        } catch (e) {
+                            console.warn('불러오기 실패:', key, e);
+                        }
+                    }
+                    lastSavedState[key] = JSON.stringify(HOMPY_STATE[key].get());
+                    return;
+                }
+                let found = false;
+                const merged = [];
+                const loaded = {};
+                SPLIT_KEYS[key].forEach(loc => {
+                    const raw = byLoc[loc][key];
+                    let list = [];
+                    if (typeof raw === 'string') {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            if (Array.isArray(parsed)) { list = parsed; found = true; }
+                        } catch (e) {
+                            console.warn('불러오기 실패:', key, loc, e);
+                        }
+                    }
+                    loaded[loc] = JSON.stringify(list);
+                    list.forEach((item, i) => merged.push({ item, seq: (item && typeof item._seq === 'number') ? item._seq : i }));
+                });
+                if (found) {
+                    merged.sort((a, b) => a.seq - b.seq);
+                    HOMPY_STATE[key].set(merged.map(m => stripSeq(m.item)));
+                    SPLIT_KEYS[key].forEach(loc => { lastSavedState[key + '@' + loc] = loaded[loc]; });
+                } else {
+                    // 아직 저장된 적 없으면 지금 화면 그대로를 "저장된 상태"로 봐요
+                    const parts = splitItems(key, HOMPY_STATE[key].get());
+                    SPLIT_KEYS[key].forEach(loc => { lastSavedState[key + '@' + loc] = JSON.stringify(parts[loc]); });
+                }
+            });
+
+            // 다이어리는 기본이 "나만 보기": 공개 설정이 없던 옛 다이어리는 비공개로 옮겨요
+            if (isOwner) {
+                diaries.forEach(d => { if (d && !d.visibility) d.visibility = 'private'; });
+            }
+        }
+
+        // 친구가 아닌 사람: 가림막 아래에 전체공개 글만 보여 줘요
+        async function showOpenPostsInGate(ownerId) {
+            try {
+                const snap = await fbDb.ref('hompy_open/' + ownerId + '/data/boardPosts').once('value');
+                let posts = [];
+                try { posts = JSON.parse(snap.val() || '[]'); } catch (e) { posts = []; }
+                if (!Array.isArray(posts)) return;
+                posts = posts.filter(p => p && p.visibility === 'public')
+                    .sort((a, b) => (a._seq || 0) - (b._seq || 0));
+                if (posts.length === 0) return;
+                const box = document.querySelector('#hompy-gate .hompy-gate-box');
+                if (!box || box.querySelector('.gate-open-posts')) return;
+                const wrap = document.createElement('div');
+                wrap.className = 'gate-open-posts';
+                wrap.innerHTML = `<div class="gate-open-title">🌐 전체공개 게시글 (${posts.length})</div>`
+                    + posts.map(p => `
+                        <details class="gate-open-post">
+                            <summary><span>${escapeFavoriteHtml(p.title || '(제목 없음)')}</span><span class="gate-open-date">${escapeFavoriteHtml(p.date || '')}</span></summary>
+                            <div class="gate-open-body">${p.content ? DOMPurify.sanitize(p.content) : '내용이 없습니다.'}</div>
+                        </details>`).join('');
+                box.appendChild(wrap);
+            } catch (e) {
+                console.warn('전체공개 글을 불러오지 못했어요', e);
+            }
+        }
+
+        // 게시글 상세: 주인에게만 공개 설정 선택칸
+        function syncBoardDetailVisibility(index) {
+            const sel = document.getElementById('board-detail-visibility');
+            if (!sel) return;
+            const post = (index !== null && index !== undefined) ? boardPosts[index] : null;
+            const row = document.getElementById('board-detail-visibility-row') || sel;
+            if (!hompyIsOwnerNow() || !post) {
+                row.style.display = 'none';
+                return;
+            }
+            sel.value = VIS_LABEL[post.visibility] ? post.visibility : 'friends';
+            row.style.display = '';
+        }
+
+        function changeCurrentBoardVisibility(v) {
+            if (!hompyIsOwnerNow() || !VIS_LABEL[v]) return;
+            if (currentViewingPostIndex === null || currentViewingPostIndex === undefined) return;
+            const post = boardPosts[currentViewingPostIndex];
+            if (!post) return;
+            post.visibility = v;
+            saveDirtyState();
+            showWin98Alert(`이 글을 <b>${VIS_LABEL[v]}</b>(으)로 바꿨어요.<br><span style="font-size:10px; color:#777;">${VIS_DESC[v]}</span>`, '공개 설정');
+        }
+
+        // 사진첩: 앨범 단위로 공개 설정 (사진 파일도 함께 옮겨요)
+        function openAlbumVisibilityPrompt() {
+            if (!hompyIsOwnerNow() || currentPhotoAlbumIndex === null) return;
+            const idx = currentPhotoAlbumIndex;
+            const album = photoAlbums[idx];
+            if (!album) return;
+            const cur = album.visibility === 'private' ? 'private' : 'friends';
+            const overlay = document.getElementById('win98-modal-overlay');
+            document.getElementById('win98-title').innerText = '앨범 공개 설정';
+            document.getElementById('win98-dialog-content').innerHTML = `
+                <div style="min-width:250px;">
+                    <div style="margin-bottom:8px;"><b>${escapeFavoriteHtml(album.name)}</b> 앨범을 누가 볼 수 있을까요?</div>
+                    ${['private', 'friends'].map(v => `
+                        <label class="vis-choice">
+                            <input type="radio" name="album-vis-radio" value="${v}" ${v === cur ? 'checked' : ''}>
+                            <span><b>${VIS_LABEL[v]}</b><small>${VIS_DESC[v]}</small></span>
+                        </label>`).join('')}
+                </div>`;
+            document.getElementById('win98-dialog-buttons').innerHTML = `
+                <button class="win98-btn" id="album-vis-save">저장</button>
+                <button class="win98-btn" onclick="closeWin98Modal()">취소</button>`;
+            overlay.style.display = 'flex';
+            document.getElementById('album-vis-save').onclick = function () {
+                const checked = document.querySelector('input[name="album-vis-radio"]:checked');
+                const v = checked ? checked.value : cur;
+                if (v === cur) {
+                    closeWin98Modal();
+                    return;
+                }
+                this.disabled = true;
+                this.innerText = album.photos.length ? '사진 옮기는 중...' : '저장 중...';
+                setAlbumVisibility(album, v).then(failed => {
+                    closeWin98Modal();
+                    const nowIdx = photoAlbums.indexOf(album);
+                    if (nowIdx >= 0) openPhotoAlbum(nowIdx);
+                    if (failed) {
+                        showWin98Alert(`사진 ${failed}장을 옮기지 못해서 공개 설정을 바꾸지 않았어요.<br>잠시 후 다시 해 주세요.`, '공개 설정');
+                    } else {
+                        showWin98Alert(`앨범을 <b>${VIS_LABEL[v]}</b>(으)로 바꿨어요.<br><span style="font-size:10px; color:#777;">${VIS_DESC[v]}</span>`, '공개 설정');
+                    }
+                });
+            };
+        }
+
+        async function setAlbumVisibility(album, vis) {
+            const from = album.visibility === 'private' ? 'private' : 'friends';
+            let failed = 0;
+            for (const photo of album.photos.slice()) {
+                if (!photo || !photo.id) continue;
+                try {
+                    const data = await loadFullPhoto(photo.id, from);
+                    if (!data) continue;
+                    const updates = {};
+                    updates[photoBase(vis) + photo.id] = data;
+                    updates[photoBase(from) + photo.id] = null;
+                    await fbDb.ref().update(updates);
+                } catch (e) {
+                    console.error('사진 옮기기 실패', e);
+                    failed++;
+                }
+            }
+            if (failed) return failed;
+            album.visibility = vis;
+            saveDirtyState();
+            return 0;
+        }
+    </script>
     <style>
         /* =====================================================================
            모바일용 화면 (웹용 홈피를 복사해서 휴대폰 화면에 맞게 덮어쓴 부분)
@@ -2358,6 +2765,10 @@
             min-width: 0;
             width: calc(100vw - 40px);
             max-width: 320px;
+        }
+
+        .hompy-gate-box .gate-open-posts {
+            width: auto;
         }
 
         /* 싸이월드 홈 · BGM 플레이어: 창 아래로 */
@@ -2654,7 +3065,7 @@
                                         style="border:1px solid #b2c9be; background:#fcfdfc; border-radius:4px; padding:14px; flex-grow:1; display:flex; flex-direction:column; gap:10px;">
                                         <div class="diary-detail-header-row"
                                             style="background-color:#e2ede7; border:1px solid #b2c9be; padding:6px 10px; font-size:12px; font-weight:bold; color:#2e5944; display:flex; justify-content:space-between;">
-                                            <span id="diary-detail-date-badge">2023-1-25</span>
+                                            <span><span id="diary-detail-date-badge">2023-1-25</span><span id="diary-detail-vis-badge"></span></span>
                                             <span id="diary-detail-category-badge" class="diary-category-badge"
                                                 style="background:#fff; color:#2e5944;">기본</span>
                                         </div>
@@ -2728,6 +3139,7 @@
                                 </div>
                                 <div class="diary-form-box">
                                     <div class="diary-form-inner">
+                                        <div class="vis-row">공개 설정 <select id="diary-form-visibility" class="board-select vis-select"><option value="private">🔒 비공개 (나만 보기)</option><option value="friends">👥 친구공개</option></select></div>
                                         <input type="text" id="diary-form-title-input" class="diary-title-input"
                                             placeholder="제목을 입력해주세요">
                                         <textarea id="diary-form-content-textarea" class="diary-content-textarea"
@@ -2975,6 +3387,7 @@
                                     </div>
                                 </div>
                                 <div class="board-bottom-bar">
+                                    <label class="vis-row" id="board-detail-visibility-row" style="display:none;">공개 설정 <select id="board-detail-visibility" class="board-select vis-select" onchange="changeCurrentBoardVisibility(this.value)"><option value="private">🔒 비공개</option><option value="friends">👥 친구공개</option><option value="public">🌐 전체공개</option></select></label>
                                     <div class="board-actions" style="margin-left: auto;">
                                         <button class="board-btn" id="board-detail-delete-btn" style="display:none;"
                                             onclick="deleteCurrentBoardPost()">삭제</button>
@@ -2996,6 +3409,7 @@
                                             style="flex-grow: 1;" onchange="updateBoardWriteNote()">
                                         </select>
                                         <span class="board-write-shared-note" id="board-write-shared-note"></span>
+                                        <select id="board-write-visibility" class="board-select vis-select" title="공개 설정"><option value="private">🔒 비공개</option><option value="friends">👥 친구공개</option><option value="public">🌐 전체공개</option></select>
                                     </div>
                                     <input type="text" id="board-write-title" class="board-title-input"
                                         placeholder="제목을 입력하세요">
@@ -3974,7 +4388,8 @@
                 author: targetPost.author || '미니홈피 주인',
                 date: formatLocalDateTime(new Date()),
                 content: targetPost.content,
-                scrapCount: 0
+                scrapCount: 0,
+                visibility: targetPost.visibility || 'friends'
             };
 
             boardPosts.push(scrappedPost);
@@ -4444,7 +4859,7 @@
                         const cover = album.photos.length ? album.photos[album.photos.length - 1].thumb : '';
                         return `
                             <div class="photo-card" onclick="openPhotoAlbum(${idx})">
-                                <div class="photo-thumb"><div class="photo-thumb-inner">${cover ? `<img src="${escapeFavoriteHtml(cover)}" alt="">` : '📷'}</div></div>
+                                <div class="photo-thumb" style="position:relative;">${visBadge(album, 'friends').replace('class="vis-badge', 'class="vis-badge vis-corner')}<div class="photo-thumb-inner">${cover ? `<img src="${escapeFavoriteHtml(cover)}" alt="">` : '📷'}</div></div>
                                 <div class="photo-card-label">${escapeFavoriteHtml(album.name)}<span class="photo-card-num">(${album.photos.length})</span></div>
                             </div>`;
                     }).join('')}</div>`;
@@ -4457,7 +4872,7 @@
                 // 앨범 안 사진 목록 화면
                 const album = photoAlbums[currentPhotoAlbumIndex];
                 title.innerText = `📷 사진첩 - ${album.name}`;
-                countLabel.innerHTML = `<b>${escapeFavoriteHtml(album.name)}</b><span class="photo-count-total" style="margin-left:4px;">사진 ${album.photos.length}장</span>`;
+                countLabel.innerHTML = `<b>${escapeFavoriteHtml(album.name)}</b>${visBadge(album, 'friends')}<span class="photo-count-total" style="margin-left:4px;">사진 ${album.photos.length}장</span>`;
 
                 if (album.photos.length === 0) {
                     area.innerHTML = `<div class="photo-grid-empty">아직 올린 사진이 없습니다.${!isVisitorMode ? '<br>아래의 [📷 사진 올리기]로 사진을 추가해 보세요.' : ''}</div>`;
@@ -4472,6 +4887,7 @@
                 actions.innerHTML = `
                     <button class="board-btn" onclick="openPhotoAlbum(null)">목록</button>
                     ${isVisitorMode ? '' : `
+                        <button class="board-btn" onclick="openAlbumVisibilityPrompt()">공개 설정</button>
                         <button class="board-btn" onclick="openRenamePhotoAlbumPrompt()">이름 변경</button>
                         <button class="board-btn" onclick="deleteCurrentPhotoAlbum()">앨범 삭제</button>
                         <button class="board-btn" style="background:#2e5944; color:white;" onclick="openPhotoUploadModal()">📷 사진 올리기</button>
@@ -4506,7 +4922,7 @@
             document.getElementById('photo-detail-date').innerText = photo.date;
             const frame = document.getElementById('photo-detail-frame');
             frame.innerHTML = `<img src="${escapeFavoriteHtml(photo.thumb)}" alt="" style="filter: blur(1px); opacity: 0.7;">`;
-            loadFullPhoto(photo.id).then(url => {
+            loadFullPhoto(photo.id, album.visibility).then(url => {
                 if (url && photoAlbums[currentPhotoAlbumIndex] && photoAlbums[currentPhotoAlbumIndex].photos[currentPhotoIndex] === photo) {
                     frame.innerHTML = `<img src="${escapeFavoriteHtml(url)}" alt="">`;
                 }
@@ -4526,10 +4942,10 @@
 
         function openAddPhotoAlbumPrompt() {
             if (isVisitorMode) return;
-            showWin98Prompt('새 앨범 이름을 입력하세요:', '', function (name) {
+            showWin98Prompt('새 앨범 이름을 입력하세요:<br><span style="font-size:10px; color:#777;">새 앨범은 🔒 비공개로 만들어져요. 앨범 안의 [공개 설정]에서 친구공개로 바꿀 수 있어요.</span>', '', function (name) {
                 const cleanName = (name || '').trim();
                 if (!cleanName) return;
-                photoAlbums.push({ name: cleanName, photos: [] });
+                photoAlbums.push({ name: cleanName, visibility: 'private', photos: [] });
                 renderPhotoTab();
             }, '앨범 추가');
         }
@@ -4603,7 +5019,7 @@
                 const saveBtn = document.getElementById('photo-upload-save-btn');
                 saveBtn.disabled = true;
                 saveBtn.innerText = '올리는 중...';
-                uploadPhotoFiles(files).then(added => {
+                uploadPhotoFiles(files, photoAlbums[albumIdx].visibility).then(added => {
                     const now = new Date();
                     const date = `${getPhotoTodayString()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                     added.forEach(p => photoAlbums[albumIdx].photos.push({ id: p.id, thumb: p.thumb, caption, date }));
@@ -4620,7 +5036,7 @@
         // 사진 한 장 = 큰 그림(photos/아이디, 볼 때만 불러옴) + 작은 그림(앨범 목록에 저장)
         const fullPhotoCache = {};
 
-        async function uploadPhotoFiles(files) {
+        async function uploadPhotoFiles(files, visibility) {
             const added = [];
             for (const file of files) {
                 try {
@@ -4629,7 +5045,7 @@
                         compressImageFile(file, 220, 0.7)
                     ]);
                     const id = fbDb.ref('minihompy/' + hompyOwnerId + '/photos').push().key;
-                    await fbDb.ref('minihompy/' + hompyOwnerId + '/photos/' + id).set(full);
+                    await fbDb.ref(photoBase(visibility) + id).set(full);
                     fullPhotoCache[id] = full;
                     added.push({ id, thumb });
                 } catch (e) {
@@ -4639,11 +5055,13 @@
             return added;
         }
 
-        async function loadFullPhoto(id) {
+        async function loadFullPhoto(id, visibility) {
             if (!id) return null;
             if (fullPhotoCache[id]) return fullPhotoCache[id];
             try {
-                const snap = await fbDb.ref('minihompy/' + hompyOwnerId + '/photos/' + id).once('value');
+                let snap = await fbDb.ref(photoBase(visibility) + id).once('value');
+                // 공개 설정을 옮기는 중이면 다른 칸에 있을 수 있어요 (주인만)
+                if (snap.val() === null && isOwner) snap = await fbDb.ref(photoBase(visibility === 'private' ? 'friends' : 'private') + id).once('value');
                 fullPhotoCache[id] = snap.val();
                 return fullPhotoCache[id];
             } catch (e) {
@@ -4655,6 +5073,7 @@
             const updates = {};
             ids.filter(Boolean).forEach(id => {
                 updates['minihompy/' + hompyOwnerId + '/photos/' + id] = null;
+                updates['hompy_private/' + hompyOwnerId + '/photos/' + id] = null;
                 delete fullPhotoCache[id];
             });
             if (Object.keys(updates).length) fbDb.ref().update(updates).catch(e => console.error(e));
@@ -4927,6 +5346,7 @@
                 document.getElementById('diary-form-content-textarea').value = '';
                 document.getElementById('diary-form-mode-title').innerText = `DIARY (${selectedDiaryCategory})`;
                 document.getElementById('diary-submit-action-btn').innerText = '생성하기';
+                document.getElementById('diary-form-visibility').value = 'private';
             }
             showDiarySubview('form');
         }
@@ -4957,6 +5377,7 @@
                 diaries[currentViewingDiaryIndex].category = selectedDiaryCategory;
                 diaries[currentViewingDiaryIndex].title = titleVal;
                 diaries[currentViewingDiaryIndex].content = contentVal;
+                diaries[currentViewingDiaryIndex].visibility = getDiaryFormVisibility();
                 showWin98Alert('다이어리가 수정되었습니다.');
                 viewDiaryDetail(currentViewingDiaryIndex);
             } else {
@@ -4964,7 +5385,8 @@
                     date: selectedDiaryDate,
                     category: selectedDiaryCategory,
                     title: titleVal,
-                    content: contentVal
+                    content: contentVal,
+                    visibility: getDiaryFormVisibility()
                 });
                 document.getElementById('diary-count-badge').innerText = `${diaries.length}/${diaries.length}`;
                 showDiarySubview('list');
@@ -4991,7 +5413,7 @@
                         <div class="diary-card-header">
                             <div>
                                 <span class="diary-date-badge">${escapeFavoriteHtml(diary.date)}</span>
-                                <span class="diary-category-badge">${escapeFavoriteHtml(diary.category)}</span>
+                                <span class="diary-category-badge">${escapeFavoriteHtml(diary.category)}</span>${visBadge(diary, 'private')}
                             </div>
                             <a href="#" class="diary-detail-link" onclick="viewDiaryDetail(${actualIndex})">자세히 보러 가기 &gt;</a>
                         </div>
@@ -5008,6 +5430,7 @@
 
             document.getElementById('diary-detail-date-badge').innerText = diary.date;
             document.getElementById('diary-detail-category-badge').innerText = diary.category;
+            document.getElementById('diary-detail-vis-badge').innerHTML = visBadge(diary, 'private');
             document.getElementById('diary-detail-title-text').innerText = `제목 : ${diary.title}`;
             document.getElementById('diary-detail-body-text').innerText = diary.content;
 
@@ -5025,6 +5448,7 @@
             document.getElementById('diary-form-content-textarea').value = diary.content;
             document.getElementById('diary-form-mode-title').innerText = `DIARY 수정 (${selectedDiaryCategory})`;
             document.getElementById('diary-submit-action-btn').innerText = '수정 완료';
+            document.getElementById('diary-form-visibility').value = diary.visibility === 'friends' ? 'friends' : 'private';
 
             showDiarySubview('form');
         }
@@ -5074,7 +5498,7 @@
                         <td style="text-align: center;">${items.length - i}</td>
                         <td style="cursor: pointer; font-weight: bold;" onclick="${openCall}">${escapeFavoriteHtml(post.title)} ${isShared
                             ? '<span class="board-shared-tag">자유게시판</span>'
-                            : `<span style="font-size:9px; color:#888; font-weight:normal;">[${escapeFavoriteHtml(post.category)}]</span>`}</td>
+                            : `<span style="font-size:9px; color:#888; font-weight:normal;">[${escapeFavoriteHtml(post.category)}]</span>${visBadge(post, 'friends')}`}</td>
                         <td>${escapeFavoriteHtml(author)}</td>
                         <td style="font-size: 10px; color: #666;">${escapeFavoriteHtml(post.date || '')}</td>
                     </tr>
@@ -5114,6 +5538,7 @@
             }
             document.getElementById('board-write-title').value = '';
             document.getElementById('board-write-content').innerHTML = '';
+            document.getElementById('board-write-visibility').value = 'private';
             document.getElementById('board-sub-list').style.display = 'none';
             document.getElementById('board-sub-detail').style.display = 'none';
             document.getElementById('board-sub-write').style.display = 'flex';
@@ -5143,7 +5568,8 @@
                 author: '미니홈피 주인',
                 date: formatLocalDateTime(new Date()),
                 content: content,
-                scrapCount: 0
+                scrapCount: 0,
+                visibility: document.getElementById('board-write-visibility').value || 'private'
             });
 
             document.getElementById('board-count-badge').innerText = `${boardPosts.length}/${boardPosts.length}`;
@@ -5614,8 +6040,8 @@
                 set: v => { ilchonGroups = v.map(g => ({ ...g, open: false, friends: g.friends || [] })); }
             },
             photoAlbums: {
-                get: () => photoAlbums.map(a => ({ name: a.name, photos: a.photos.map(p => ({ id: p.id, thumb: p.thumb, caption: p.caption, date: p.date })) })),
-                set: v => { photoAlbums = v.map(a => ({ name: a.name, photos: a.photos || [] })); }
+                get: () => photoAlbums.map(a => ({ name: a.name, visibility: a.visibility === 'private' ? 'private' : 'friends', photos: a.photos.map(p => ({ id: p.id, thumb: p.thumb, caption: p.caption, date: p.date })) })),
+                set: v => { photoAlbums = v.map(a => ({ name: a.name, visibility: a.visibility === 'private' ? 'private' : 'friends', photos: a.photos || [] })); }
             },
             miniroom: {
                 get: () => ({ customSkins: miniroomSkins.slice(BUILTIN_SKIN_COUNT), current: currentSkinRef() }),
@@ -5791,6 +6217,7 @@
                 if (friendSnap.val() !== true) {
                     const nick = escapeFavoriteHtml(ownerInfo.nickname || hompyOwnerId);
                     showHompyGate(`<b>${nick}</b>님의 미니홈피는 친구만 볼 수 있어요.<br>메신저에서 친구 추가를 해 보세요!`, true);
+                    showOpenPostsInGate(hompyOwnerId);
                     hompyBootStarted = false;
                     return;
                 }
@@ -5830,19 +6257,9 @@
             if (addrInput) addrInput.value = addrInput.value.replace('www.cyworld.com/green_miniroom', addrText);
             if (winTitle) winTitle.innerText = winTitle.innerText.replace('www.cyworld.com/green_miniroom', addrText);
 
-            // 홈피 데이터 불러오기
-            const dataSnap = await fbDb.ref('minihompy/' + hompyOwnerId + '/data').once('value');
-            const data = dataSnap.val() || {};
-            Object.keys(HOMPY_STATE).forEach(key => {
-                if (typeof data[key] === 'string') {
-                    try {
-                        HOMPY_STATE[key].set(JSON.parse(data[key]));
-                    } catch (e) {
-                        console.warn('불러오기 실패:', key, e);
-                    }
-                }
-                lastSavedState[key] = JSON.stringify(HOMPY_STATE[key].get());
-            });
+            // 홈피 데이터 불러오기 (친구공개 + 전체공개, 주인은 비공개까지)
+            await loadHompyData();
+
 
             // 친구 목록 (일촌 추가용) + 일촌/즐겨찾기에 나오는 사람들 이름
             const friendSnap = await fbDb.ref('user_friends/' + hompyOwnerId).once('value');
@@ -5871,11 +6288,7 @@
             const updates = {};
             const pending = {};
             Object.keys(HOMPY_STATE).forEach(key => {
-                const str = JSON.stringify(HOMPY_STATE[key].get());
-                if (str !== lastSavedState[key]) {
-                    updates[`minihompy/${hompyOwnerId}/data/${key}`] = str;
-                    pending[key] = str;
-                }
+                collectSaveUpdates(key, updates, pending);
             });
             if (Object.keys(updates).length === 0) return;
             Object.assign(lastSavedState, pending);
@@ -6151,6 +6564,8 @@
             const select = document.getElementById('board-write-category-select');
             const note = document.getElementById('board-write-shared-note');
             if (select && note) note.innerText = select.value === SHARED_BOARD_NAME ? '모든 친구의 홈피에 보여요' : '';
+            const visSelect = document.getElementById('board-write-visibility');
+            if (select && visSelect) visSelect.style.display = select.value === SHARED_BOARD_NAME ? 'none' : '';
         }
 
         (function patchBoardWrite() {
@@ -6224,7 +6639,7 @@
             "title": "📢 [공지] 버디버디 사용법 & 꼭 알아 둘 주의사항",
             "author": "관리자",
             "date": "2026-11-19 17:20",
-            "html": "<div class=\"notice-text\">안녕하세요, 버디버디 관리자예요 🌿\n버디버디를 쓰면서 잘 모를 만한 기능이랑 주의사항을 정리했어요.\n처음 오신 분도, 원래 쓰던 분도 한 번씩 읽어 주세요!\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 1. 비밀번호를 잊어버렸을 때를 위해 &quot;이메일 등록&quot;을 꼭 해 두세요\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저에서 내 사진(아바타)을 누르면 [내 정보 설정] 창이 열려요.\n▶ 아래쪽 [이메일 등록] → 이메일과 현재 비밀번호 입력 → [확인 메일 보내기]\n▶ 메일함에 온 링크를 눌러야 등록이 끝나요. (스팸함도 확인해 주세요!)\n▶ 링크를 누르고 나면 한 번 로그아웃될 수 있어요. 아이디로 다시 로그인하면 돼요.</div>\n<img class=\"notice-img\" src=\"notice/1-profile.png\" alt=\"내 정보 설정 창의 이메일 등록 버튼\">\n<div class=\"notice-text\">▶ 비밀번호를 잊으면: 로그인 화면 [비밀번호 찾기] → 아이디 입력\n   → 등록한 이메일로 온 메일에서 새 비밀번호(6자리 이상)를 정하면 끝!\n▶ 이메일을 등록하지 않았다면 친구 계정으로 로그인해서 📮 문의함에 남겨 주세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 2. 비밀번호는 여기서만 쓰는 걸로!\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 버디버디는 친구들끼리 쓰려고 직접 만든 사이트예요.\n   다른 사이트(포털, 은행, SNS 등)에서 쓰는 비밀번호는 절대 쓰지 마세요.\n▶ 이미 그런 비밀번호를 쓰고 있다면 [내 정보 설정] → [비밀번호 변경]으로 바꿔 주세요.\n▶ 비밀번호는 관리자도 볼 수 없어요. 누가 물어봐도 알려 주지 마세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 3. 친구 추가 &amp; 미니홈피 가기\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저 [➕ 친구추가]에 친구 아이디를 넣으면 요청이 가고, 상대가 수락하면 서로 친구가 돼요.\n▶ 메신저의 [홈피] 탭에서 내 홈피와 친구들 홈피를 바로 열 수 있어요.</div>\n<img class=\"notice-img\" src=\"notice/2-messenger-hompy.png\" alt=\"메신저 홈피 탭\">\n<div class=\"notice-text\">▶ 홈피에서 메신저로 돌아갈 때는 맨 위 제목줄의 [💬 메신저] 버튼을 누르세요.\n   (휴대폰은 위쪽 메뉴 줄 맨 앞에 있어요)\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 4. 일촌 맺기 (일촌명 폴더)\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 내 홈피 [홈] 화면 일촌 칸의 [+ 일촌 관리]를 누르세요.\n▶ [일촌명 추가]로 &quot;단짝&quot;, &quot;베프&quot; 같은 일촌명을 만들고,\n   그 일촌명의 [+친구]를 눌러 메신저 친구를 넣으면 돼요. (여러 명도 가능!)</div>\n<img class=\"notice-img\" src=\"notice/3-ilchon-manage.png\" alt=\"일촌 관리 창의 일촌명 추가와 +친구\">\n<div class=\"notice-text\">▶ 홈 화면에서 일촌명을 누르면 친구 목록이 펼쳐지고,\n   친구 이름을 누르면 그 친구 홈피로 바로 이동해요. (파도타기 🌊)\n▶ 일촌으로 넣은 친구가 방명록을 쓰면, 이름 앞에 회색으로 일촌명이 붙어요.</div>\n<img class=\"notice-img\" src=\"notice/4-home-ilchon.png\" alt=\"홈 화면 일촌 칸\">\n<div class=\"notice-text\">━━━━━━━━━━━━━━━━━━━━━━\n■ 5. 자유게시판은 모두의 게시판이에요\n━━━━━━━━━━━━━━━━━━━━━━\n▶ [게시판] → [글쓰기]에서 카테고리를 &quot;자유게시판&quot;으로 고르면\n   버디버디의 모든 사람 홈피 게시판에 함께 올라가요.\n▶ 목록에서 초록색 [자유게시판] 표시가 붙은 글이 모두가 보는 글이에요.\n▶ 다른 카테고리로 쓴 글은 내 홈피 게시판에만 올라가요.\n▶ 글을 지우려면 내 글 앞의 칸을 체크하고 [삭제]를 누르세요.\n   자유게시판 글은 쓴 사람만 지울 수 있고, 수정 기능은 없으니 고치고 싶으면 지우고 다시 써 주세요.</div>\n<img class=\"notice-img\" src=\"notice/5-board-list.png\" alt=\"게시판 목록의 자유게시판 표시와 글쓰기, 삭제 버튼\">\n<div class=\"notice-text\">━━━━━━━━━━━━━━━━━━━━━━\n■ 6. 꼭 알아 두세요 ⚠️\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 미니홈피(다이어리, 사진첩, 방명록 포함)는 &quot;서로 친구인 사람&quot;만 볼 수 있어요.\n   대신 친구라면 다이어리까지 전부 볼 수 있으니, 혼자만 보고 싶은 내용은 쓰지 마세요!\n▶ 친구를 끊으면 그 순간부터 서로의 홈피를 볼 수 없어요.\n▶ 주소, 전화번호, 학교 같은 개인정보는 올리지 않는 걸 추천해요.\n▶ 사진은 올릴 때 자동으로 작게 줄여서 저장돼요.\n   무료로 운영 중이라 저장 공간이 넉넉하지 않으니, 너무 많이 올리지 말아 주세요 🙏\n▶ 주크박스에 내 컴퓨터 음악 파일을 올리면, 그 창에서만 재생되고 저장되지 않아요.\n▶ 휴대폰에서는 다이어리 카테고리를 꾹 길게 누르면 이름 변경/삭제 메뉴가 나와요.\n▶ 화면이 이상하거나 새 기능이 안 보이면 새로고침(PC는 Ctrl + F5)을 해 주세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 7. 관리자에게 문의하기 📮\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저 맨 위 메뉴 줄 오른쪽의 [📮 문의함]을 누르면 &quot;버디 우체통&quot;이 열려요.\n▶ 분류(질문 / 고장 신고 / 바라는 점 / 기타)를 고르고 제목과 내용을 적어 [💌 보내기]!</div>\n<img class=\"notice-img\" src=\"notice/6-mailbox.png\" alt=\"메신저 문의함 버튼과 버디 우체통 편지 쓰기 화면\">\n<div class=\"notice-text\">▶ 보낸 편지는 관리자만 읽을 수 있어요.\n▶ 관리자가 답장하면 [📮 문의함] 옆에 빨간 숫자가 떠요. [📬 내 편지]에서 답장을 확인하세요.\n▶ 관리자는 절대 비밀번호를 묻지 않아요. 비밀번호를 묻는 사람이 있으면 문의함으로 알려 주세요!\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 주소 모음\n━━━━━━━━━━━━━━━━━━━━━━\n💻 PC 메신저: <a href=\"https://k2w0.github.io/buddybudddy/\" target=\"_blank\" rel=\"noopener\">https://k2w0.github.io/buddybudddy/</a>\n📱 휴대폰 메신저: <a href=\"https://k2w0.github.io/buddy-mobile/\" target=\"_blank\" rel=\"noopener\">https://k2w0.github.io/buddy-mobile/</a>\n\n궁금한 점이나 고장 난 곳은 언제든 📮 문의함으로 알려 주세요.\n즐거운 버디버디 되세요! 🌿</div>"
+            "html": "<div class=\"notice-text\">안녕하세요, 버디버디 관리자예요 🌿\n버디버디를 쓰면서 잘 모를 만한 기능이랑 주의사항을 정리했어요.\n처음 오신 분도, 원래 쓰던 분도 한 번씩 읽어 주세요!\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 1. 비밀번호를 잊어버렸을 때를 위해 &quot;이메일 등록&quot;을 꼭 해 두세요\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저에서 내 사진(아바타)을 누르면 [내 정보 설정] 창이 열려요.\n▶ 아래쪽 [이메일 등록] → 이메일과 현재 비밀번호 입력 → [확인 메일 보내기]\n▶ 메일함에 온 링크를 눌러야 등록이 끝나요. (스팸함도 확인해 주세요!)\n▶ 링크를 누르고 나면 한 번 로그아웃될 수 있어요. 아이디로 다시 로그인하면 돼요.</div>\n<img class=\"notice-img\" src=\"notice/1-profile.png\" alt=\"내 정보 설정 창의 이메일 등록 버튼\">\n<div class=\"notice-text\">▶ 비밀번호를 잊으면: 로그인 화면 [비밀번호 찾기] → 아이디 입력\n   → 등록한 이메일로 온 메일에서 새 비밀번호(6자리 이상)를 정하면 끝!\n▶ 이메일을 등록하지 않았다면 친구 계정으로 로그인해서 📮 문의함에 남겨 주세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 2. 비밀번호는 여기서만 쓰는 걸로!\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 버디버디는 친구들끼리 쓰려고 직접 만든 사이트예요.\n   다른 사이트(포털, 은행, SNS 등)에서 쓰는 비밀번호는 절대 쓰지 마세요.\n▶ 이미 그런 비밀번호를 쓰고 있다면 [내 정보 설정] → [비밀번호 변경]으로 바꿔 주세요.\n▶ 비밀번호는 관리자도 볼 수 없어요. 누가 물어봐도 알려 주지 마세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 3. 친구 추가 &amp; 미니홈피 가기\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저 [➕ 친구추가]에 친구 아이디를 넣으면 요청이 가고, 상대가 수락하면 서로 친구가 돼요.\n▶ 메신저의 [홈피] 탭에서 내 홈피와 친구들 홈피를 바로 열 수 있어요.</div>\n<img class=\"notice-img\" src=\"notice/2-messenger-hompy.png\" alt=\"메신저 홈피 탭\">\n<div class=\"notice-text\">▶ 홈피에서 메신저로 돌아갈 때는 맨 위 제목줄의 [💬 메신저] 버튼을 누르세요.\n   (휴대폰은 위쪽 메뉴 줄 맨 앞에 있어요)\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 4. 일촌 맺기 (일촌명 폴더)\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 내 홈피 [홈] 화면 일촌 칸의 [+ 일촌 관리]를 누르세요.\n▶ [일촌명 추가]로 &quot;단짝&quot;, &quot;베프&quot; 같은 일촌명을 만들고,\n   그 일촌명의 [+친구]를 눌러 메신저 친구를 넣으면 돼요. (여러 명도 가능!)</div>\n<img class=\"notice-img\" src=\"notice/3-ilchon-manage.png\" alt=\"일촌 관리 창의 일촌명 추가와 +친구\">\n<div class=\"notice-text\">▶ 홈 화면에서 일촌명을 누르면 친구 목록이 펼쳐지고,\n   친구 이름을 누르면 그 친구 홈피로 바로 이동해요. (파도타기 🌊)\n▶ 일촌으로 넣은 친구가 방명록을 쓰면, 이름 앞에 회색으로 일촌명이 붙어요.</div>\n<img class=\"notice-img\" src=\"notice/4-home-ilchon.png\" alt=\"홈 화면 일촌 칸\">\n<div class=\"notice-text\">━━━━━━━━━━━━━━━━━━━━━━\n■ 5. 자유게시판은 모두의 게시판이에요\n━━━━━━━━━━━━━━━━━━━━━━\n▶ [게시판] → [글쓰기]에서 카테고리를 &quot;자유게시판&quot;으로 고르면\n   버디버디의 모든 사람 홈피 게시판에 함께 올라가요.\n▶ 목록에서 초록색 [자유게시판] 표시가 붙은 글이 모두가 보는 글이에요.\n▶ 다른 카테고리로 쓴 글은 내 홈피 게시판에만 올라가요.\n▶ 글을 지우려면 내 글 앞의 칸을 체크하고 [삭제]를 누르세요.\n   자유게시판 글은 쓴 사람만 지울 수 있고, 수정 기능은 없으니 고치고 싶으면 지우고 다시 써 주세요.</div>\n<img class=\"notice-img\" src=\"notice/5-board-list.png\" alt=\"게시판 목록의 자유게시판 표시와 글쓰기, 삭제 버튼\">\n<div class=\"notice-text\">━━━━━━━━━━━━━━━━━━━━━━\n■ 6. 꼭 알아 두세요 ⚠️\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 미니홈피(다이어리, 사진첩, 방명록 포함)는 &quot;서로 친구인 사람&quot;만 볼 수 있어요.\n▶ 다이어리 · 사진첩 · 게시글은 하나씩 공개 범위를 고를 수 있어요.\n   🔒 비공개: 나만 볼 수 있어요. (친구도 못 봐요)\n   👥 친구공개: 서로 친구인 사람만 볼 수 있어요.\n   🌐 전체공개: 친구가 아닌 버디버디 사용자도 볼 수 있어요. (게시글만)\n   새로 쓰는 다이어리 · 앨범 · 게시글은 처음에 🔒 비공개로 저장돼요.\n   친구에게 보여 주고 싶다면 공개 설정을 바꿔 주세요!\n   - 다이어리: 글쓰기 / 수정 화면의 [공개 설정]\n   - 게시글: 글쓰기 화면, 또는 글 보기 화면 아래의 [공개 설정]\n   - 사진첩: 앨범에 들어가서 [공개 설정] 버튼 (앨범 단위)\n▶ 친구를 끊으면 그 순간부터 서로의 홈피를 볼 수 없어요.\n▶ 주소, 전화번호, 학교 같은 개인정보는 올리지 않는 걸 추천해요.\n▶ 사진은 올릴 때 자동으로 작게 줄여서 저장돼요.\n   무료로 운영 중이라 저장 공간이 넉넉하지 않으니, 너무 많이 올리지 말아 주세요 🙏\n▶ 주크박스에 내 컴퓨터 음악 파일을 올리면, 그 창에서만 재생되고 저장되지 않아요.\n▶ 휴대폰에서는 다이어리 카테고리를 꾹 길게 누르면 이름 변경/삭제 메뉴가 나와요.\n▶ 화면이 이상하거나 새 기능이 안 보이면 새로고침(PC는 Ctrl + F5)을 해 주세요.\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 7. 관리자에게 문의하기 📮\n━━━━━━━━━━━━━━━━━━━━━━\n▶ 메신저 맨 위 메뉴 줄 오른쪽의 [📮 문의함]을 누르면 &quot;버디 우체통&quot;이 열려요.\n▶ 분류(질문 / 고장 신고 / 바라는 점 / 기타)를 고르고 제목과 내용을 적어 [💌 보내기]!</div>\n<img class=\"notice-img\" src=\"notice/6-mailbox.png\" alt=\"메신저 문의함 버튼과 버디 우체통 편지 쓰기 화면\">\n<div class=\"notice-text\">▶ 보낸 편지는 관리자만 읽을 수 있어요.\n▶ 관리자가 답장하면 [📮 문의함] 옆에 빨간 숫자가 떠요. [📬 내 편지]에서 답장을 확인하세요.\n▶ 관리자는 절대 비밀번호를 묻지 않아요. 비밀번호를 묻는 사람이 있으면 문의함으로 알려 주세요!\n\n━━━━━━━━━━━━━━━━━━━━━━\n■ 주소 모음\n━━━━━━━━━━━━━━━━━━━━━━\n💻 PC 메신저: <a href=\"https://k2w0.github.io/buddybudddy/\" target=\"_blank\" rel=\"noopener\">https://k2w0.github.io/buddybudddy/</a>\n📱 휴대폰 메신저: <a href=\"https://k2w0.github.io/buddy-mobile/\" target=\"_blank\" rel=\"noopener\">https://k2w0.github.io/buddy-mobile/</a>\n\n궁금한 점이나 고장 난 곳은 언제든 📮 문의함으로 알려 주세요.\n즐거운 버디버디 되세요! 🌿</div>"
         };
 
         let isViewingNotice = false;
@@ -6319,6 +6734,25 @@
             document.addEventListener('contextmenu', function (e) {
                 if (!e.target.closest('[oncontextmenu]') && e.isTrusted) e.preventDefault();
             });
+        })();
+    </script>
+    <script>
+        /* 게시글 상세를 열 때 공개 설정 선택칸 맞추기 */
+        (function patchBoardDetailVisibility() {
+            const originalView = window.viewBoardDetail;
+            window.viewBoardDetail = function (index) {
+                const result = originalView.apply(this, arguments);
+                syncBoardDetailVisibility(index);
+                return result;
+            };
+            const originalShared = window.viewSharedBoardPost;
+            if (typeof originalShared === 'function') {
+                window.viewSharedBoardPost = function () {
+                    const result = originalShared.apply(this, arguments);
+                    syncBoardDetailVisibility(null);
+                    return result;
+                };
+            }
         })();
     </script>
 </body>
