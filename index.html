@@ -2632,10 +2632,10 @@
             text-align: left;
         }
     </style>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.4.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.4.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.4.0/firebase-auth-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.18/dist/purify.min.js" integrity="sha384-lkArbWjiZKuE+bzKbj1vOEF7DKYBDNvgwZMCt5OH8bdRB92zpzyNska9Q/XKPHQD" crossorigin="anonymous"></script>
     <script>
         /* =====================================================================
            공개 설정: 🔒 비공개 / 👥 친구공개 / 🌐 전체공개
@@ -8022,6 +8022,87 @@
             };
         })();
     </script>
+  <script>
+    /* ===== 사진 올리기 검사: 그림 파일(jpg, png, gif, webp, heic)만, 20MB까지 =====
+       파일을 고르는 순간 먼저 검사해서, 통과한 파일만 원래 올리기 기능으로 넘겨요.
+       svg는 그림처럼 보여도 코드를 넣을 수 있어서 막아요. */
+    (function imageUploadGuard() {
+      const OK_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+      const OK_EXT = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
+      const MAX_BYTES = 20 * 1024 * 1024;
+      const ACCEPT = OK_TYPES.join(',');
+
+      function isImageInput(input) {
+        return input && input.type === 'file' && /image/.test(input.getAttribute('accept') || '');
+      }
+
+      function fileProblem(file) {
+        const type = String(file.type || '').toLowerCase();
+        if (type === 'image/svg+xml' || /\.svg$/i.test(file.name)) return 'svg 파일은 올릴 수 없어요';
+        if (!(OK_TYPES.includes(type) || (!type && OK_EXT.test(file.name)))) return '그림 파일이 아니에요';
+        if (!OK_EXT.test(file.name) && !OK_TYPES.includes(type)) return '그림 파일이 아니에요';
+        if (file.size > MAX_BYTES) return '20MB보다 커요';
+        if (file.size === 0) return '빈 파일이에요';
+        return '';
+      }
+
+      // 올리기 창을 덮지 않도록 따로 작은 알림을 띄워요 (5초 뒤 사라짐)
+      function tell(message) {
+        let box = document.getElementById('img-guard-notice');
+        if (!box) {
+          box = document.createElement('div');
+          box.id = 'img-guard-notice';
+          box.setAttribute('role', 'alert');
+          box.style.cssText = 'position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:20000; max-width:min(360px, 90vw);'
+            + 'background:#fffbe6; color:#333; border:2px solid; border-color:#dfdfdf #808080 #808080 #dfdfdf; box-shadow:2px 2px 8px rgba(0,0,0,.35);'
+            + 'padding:8px 12px; font-size:12px; line-height:1.5; cursor:pointer;';
+          box.onclick = () => { box.style.display = 'none'; };
+          document.body.appendChild(box);
+        }
+        box.innerHTML = '⚠️ ' + message;
+        box.style.display = 'block';
+        clearTimeout(box._timer);
+        box._timer = setTimeout(() => { box.style.display = 'none'; }, 5000);
+      }
+
+      function esc(text) {
+        return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      // 고르는 창에서도 그림 파일만 보이게
+      function tightenAccept(root) {
+        (root || document).querySelectorAll('input[type="file"][accept*="image"]').forEach(input => input.setAttribute('accept', ACCEPT));
+      }
+      tightenAccept(document);
+      new MutationObserver(muts => muts.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) tightenAccept(n.parentNode || n); })))
+        .observe(document.documentElement, { childList: true, subtree: true });
+
+      document.addEventListener('change', (e) => {
+        const input = e.target;
+        if (!isImageInput(input) || !input.files || input.files.length === 0) return;
+        const files = Array.from(input.files);
+        const bad = files.map(f => [f, fileProblem(f)]).filter(([, why]) => why);
+        if (bad.length === 0) return;
+        const good = files.filter(f => !fileProblem(f));
+        tell(`이 파일은 올릴 수 없어요.<br>${bad.slice(0, 5).map(([f, why]) => `· ${esc(f.name)} (${why})`).join('<br>')}`
+          + `<br><span style="font-size:10px; color:#777;">jpg · png · gif · webp · heic 그림만, 20MB까지 올릴 수 있어요.</span>`);
+        if (good.length === 0) {
+          input.value = '';
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return;
+        }
+        try {
+          const dt = new DataTransfer();
+          good.forEach(f => dt.items.add(f));
+          input.files = dt.files;
+        } catch (err) {
+          input.value = '';
+          e.stopImmediatePropagation();
+        }
+      }, true);
+    })();
+  </script>
 </body>
 
 </html>
